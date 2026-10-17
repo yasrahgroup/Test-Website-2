@@ -129,10 +129,10 @@ try {
 }
 const TYPES = new Set(['services','industries','products','careers','blog','projects','pages','testimonials','team','technologies']);
 const ROLES={viewer:1,editor:2,admin:3};
-const defaults={
- brand:'AZAROTH',tagline:'Ideas. Technology. Impact.',heroEyebrow:'BUILDING TOMORROW, TOGETHER',heroTitle:'Innovative Software Solutions for a Brighter World',heroDescription:'We design, build and scale intelligent digital experiences that help ambitious businesses innovate, transform and grow.',
- aboutTitle:'Driven by Innovation. Powered by People.',aboutDescription:'Technology should empower people. Our approach combines thoughtful engineering, design and strategy to solve complex challenges.',mission:'To empower businesses through purposeful technology and lasting partnerships.',
- contactEmail:'hello@example.com',contactPhone:'+00 000 000 0000',contactLocation:'Your city · Worldwide',footerDescription:'Ideas become impact when technology meets imagination. Building purposeful digital experiences for tomorrow.',
+ const defaults={
+  brand:'AZAROTH',brandTitle:'AZAROTH',brandSubtitle:'TECHHIVE',tagline:'Ideas. Technology. Impact.',footerBrandTitle:'AZAROTH',footerBrandSubtitle:'TECHHIVE',heroEyebrow:'BUILDING TOMORROW, TOGETHER',heroTitle:'Innovative Software Solutions for a Brighter World',heroDescription:'We design, build and scale intelligent digital experiences that help ambitious businesses innovate, transform and grow.',
+  aboutTitle:'Driven by Innovation. Powered by People.',aboutDescription:'Technology should empower people. Our approach combines thoughtful engineering, design and strategy to solve complex challenges.',mission:'To empower businesses through purposeful technology and lasting partnerships.',
+  contactEmail:'hello@example.com',contactPhone:'+00 000 000 0000',contactLocation:'Your city · Worldwide',footerDescription:'Ideas become impact when technology meets imagination. Building purposeful digital experiences for tomorrow.',
  homeProductsEnabled:'true',homeProductsTitle:'Digital Products. Thoughtfully Designed.',homeProductsDescription:'Explore the platforms and software products our team builds for real business challenges.',
  primary:'#900b2b',gold:'#d5a13c',orange:'#f47721',background:'#faf8f4',ink:'#171b2c',logo:'/logo.png',cursorEnabled:'true',cursorStyle:'gold-ring',cursorSize:'42',cursorLag:'0.32',animationPreset:'elegant',
  navigation:JSON.stringify([{label:'Home',url:'/'},{label:'About',url:'/about'},{label:'Services',url:'/services'},{label:'Industries',url:'/industries'},{label:'Products',url:'/products'},{label:'Case Studies',url:'/projects'},{label:'Insights',url:'/blog'},{label:'Careers',url:'/careers'},{label:'Contact',url:'/contact'}]),
@@ -147,18 +147,21 @@ function audit(user,action,details=''){db.prepare('INSERT INTO audit(user_id,act
 function encodePassword(password){const salt=crypto.randomBytes(16);const hash=crypto.scryptSync(password,salt,64);return salt.toString('hex')+':'+hash.toString('hex');}
 function verifyPassword(password,record){try{const [salt,expected]=record.split(':');const h=crypto.scryptSync(password,Buffer.from(salt,'hex'),64);return crypto.timingSafeEqual(h,Buffer.from(expected,'hex'));}catch{return false;}}
 const emailOK=x=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x)&&x.length<=254;
-// The first administrator is created only once; remove bootstrap secret after first boot.
-if(!db.prepare('SELECT id FROM users LIMIT 1').get() && process.env.INITIAL_ADMIN_EMAIL && process.env.INITIAL_ADMIN_PASSWORD){
- const email=process.env.INITIAL_ADMIN_EMAIL.trim().toLowerCase(),pass=process.env.INITIAL_ADMIN_PASSWORD;
- if(emailOK(email)&&pass.length>=1&&pass.length<=128){
-  db.prepare('INSERT INTO users(email,password_hash,role) VALUES(?,?,?)').run(email,encodePassword(pass),'admin');
-  console.log('Initial administrator created for ' + email);
- } else {
-  console.warn('Initial administrator setup skipped: invalid email or password format.');
+// Bootstrap or synchronize primary administrator credentials from environment
+const bootstrapEmail=(process.env.INITIAL_ADMIN_EMAIL||process.env.ADMIN_EMAIL||'').trim().toLowerCase();
+const bootstrapPass=process.env.INITIAL_ADMIN_PASSWORD||process.env.ADMIN_PASSWORD;
+if(bootstrapEmail && bootstrapPass && emailOK(bootstrapEmail) && bootstrapPass.length>=1 && bootstrapPass.length<=128){
+ const existingAdmin=db.prepare('SELECT id FROM users WHERE email=?').get(bootstrapEmail);
+ if(!existingAdmin){
+  db.prepare('INSERT INTO users(email,password_hash,role,active) VALUES(?,?,?,1)').run(bootstrapEmail,encodePassword(bootstrapPass),'admin');
+  console.log('Administrator created for ' + bootstrapEmail);
+ }else{
+  db.prepare('UPDATE users SET password_hash=?, role=?, active=1 WHERE id=?').run(encodePassword(bootstrapPass),'admin',existingAdmin.id);
+  console.log('Administrator credentials synchronized for ' + bootstrapEmail);
  }
 }
-if(!db.prepare('SELECT id FROM users LIMIT 1').get()) {
- console.warn('CMS administrator is not configured. Set INITIAL_ADMIN_EMAIL and INITIAL_ADMIN_PASSWORD to bootstrap.');
+if(!db.prepare('SELECT id FROM users LIMIT 1').get()){
+ console.warn('CMS administrator is not configured. Set INITIAL_ADMIN_EMAIL and INITIAL_ADMIN_PASSWORD (or ADMIN_EMAIL and ADMIN_PASSWORD) to bootstrap.');
 }
 const hex=crypto.randomBytes,sha=s=>crypto.createHash('sha256').update(s).digest('hex');
 const MIME={'.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.html':'text/html; charset=utf-8','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.svg':'image/svg+xml','.ico':'image/x-icon','.woff2':'font/woff2'};
@@ -170,7 +173,7 @@ const imgOK=x=>x===''||x==='/logo.png'||(/^\/media\/[a-f0-9]{32}\.(png|jpg|webp)
 function cookies(req){const out={};for(const segment of (req.headers.cookie||'').split(';')){const pos=segment.indexOf('=');if(pos>0)out[segment.slice(0,pos).trim()]=segment.slice(pos+1).trim();}return out;}
 function member(req){const token=cookies(req).sid;if(!token||!/^[a-f0-9]{64}$/.test(token))return null;return db.prepare('SELECT u.id,u.email,u.role,s.csrf,s.expires FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND u.active=1').get(sha(token))||null;}
 function allowed(req,member,role='viewer'){return !!member&&member.expires>Date.now()&&ROLES[member.role]>=ROLES[role];}
-function sameSite(req){const origin=req.headers.origin;if(origin){try{const u=new URL(origin);if(u.host!==req.headers.host)return false;return u.protocol==='http:'||u.protocol==='https:';}catch{return false;}}const sec=req.headers['sec-fetch-site'];return !sec||sec==='same-origin'||sec==='none';}
+function sameSite(req){const origin=req.headers.origin;if(origin){try{const u=new URL(origin);const expectedHost=req.headers['x-forwarded-host']||req.headers.host;if(u.host!==expectedHost&&u.host!==req.headers.host)return false;return u.protocol==='http:'||u.protocol==='https:';}catch{return false;}}const sec=req.headers['sec-fetch-site'];return !sec||sec==='same-origin'||sec==='none';}
 function authWrite(req,member){return sameSite(req)&&req.headers['x-csrf-token']===member.csrf;}
 const hits=new Map();function limited(req,key,max,period=60000){const ip=(req.socket.remoteAddress||'unknown').slice(0,120),id=key+':'+ip,now=Date.now(),prev=hits.get(id)||[],fresh=prev.filter(t=>t>now-period);fresh.push(now);hits.set(id,fresh);if(hits.size>15000){for(const [k,v] of hits){if(!v.length||v[v.length-1]<now-period)hits.delete(k);}}return fresh.length>max;}
 async function jsonBody(req,limit=140000){const chunks=[];let n=0;for await(const part of req){n+=part.length;if(n>limit)throw Object.assign(Error('Payload too large'),{httpCode:413});chunks.push(part);}try{return JSON.parse(Buffer.concat(chunks).toString('utf8')||'{}');}catch{throw Object.assign(Error('Invalid JSON'),{httpCode:400});}}
@@ -190,7 +193,7 @@ function webHtml(p){const site=settings(),seo=contentSEO(p,site),canonical=siteU
  try {
   template = fs.readFileSync(path.join(pub,'index.html'),'utf8');
  } catch {
-  template = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf8f4"><link rel="icon" type="image/png" href="/icon-48.png"><link rel="apple-touch-icon" href="/icon-192.png"><meta name="description" content="Purposeful software, designed for tomorrow."><title>AZAROTH — Ideas. Technology. Impact.</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="/style.css?v=2.3"><script src="/icons.js" defer></script><script src="/app.js" defer></script><script src="/enhancements.js?v=2.3" defer></script></head><body><div id="orb" aria-hidden="true"><span></span><em></em></div><div id="app"></div></body></html>';
+  template = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf8f4"><link rel="icon" type="image/png" href="/icon-48.png"><link rel="apple-touch-icon" href="/icon-192.png"><meta name="description" content="Purposeful software, designed for tomorrow."><title>AZAROTH — Ideas. Technology. Impact.</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="/style.css?v=2.3"><script src="/icons.js" defer></script><script src="/app.js" defer></script><script src="/enhancements.js?v=2.3" defer></script></head><body><div id="orb" aria-hidden="true"><span></span><em></em></div><div id="app"></div></body></html>';
  }
  return template.replace('<title>AZAROTH — Ideas. Technology. Impact.</title>',`<title>${e(seo.title)}</title>`).replace('<meta name="description" content="Purposeful software, designed for tomorrow.">',`<meta name="description" content="${e(seo.description)}"><link rel="canonical" href="${e(canonical)}"><meta property="og:title" content="${e(seo.title)}"><meta property="og:description" content="${e(seo.description)}"><meta property="og:type" content="website"><meta property="og:url" content="${e(canonical)}">`).replace('<div id="app"></div>',`<div id="app">${fallback}</div>`).replace('</head>',`${p==='/admin'?'<meta name=\"robots\" content=\"noindex,nofollow\">':''}</head>`);
 }
@@ -200,7 +203,8 @@ const handleRequest = async(req,res)=>{
  res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' https: data:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https:; frame-ancestors *; object-src 'none'; base-uri 'self'; form-action 'self'");
  if(prod)res.setHeader('Strict-Transport-Security','max-age=31536000; includeSubDomains');
  try{
- const url=new URL(req.url,'http://localhost');const p=url.pathname;const method=req.method;const user=member(req);
+ const rawUrl=req.headers['x-matched-path']||req.headers['x-vercel-matched-path']||req.headers['x-forwarded-url']||req.originalUrl||req.url;
+ const url=new URL(rawUrl,'http://localhost');let p=url.pathname;if(p.length>1&&p.endsWith('/'))p=p.slice(0,-1);const method=req.method;const user=member(req);
  if(method==='GET'&&p==='/api/health')return j(res,200,{ok:true,db:true});
  if(method==='GET'&&p==='/api/content')return j(res,200,settings());
  if(method==='GET'&&p==='/api/layouts'){
@@ -237,7 +241,8 @@ const handleRequest = async(req,res)=>{
  }
  if(method==='POST'&&p==='/api/admin/login'){
   if(!sameSite(req)||limited(req,'login',6,600000))return j(res,429,{error:'Too many attempts. Try again later.'});
-  const x=await jsonBody(req);const email=str(x.email,254).toLowerCase(),pw=String(x.password||'').slice(0,300);
+  const x=await jsonBody(req);let email=str(x.email,254).toLowerCase(),pw=String(x.password||'').slice(0,300);
+  if(!email){const first=db.prepare("SELECT email FROM users WHERE role='admin' AND active=1 ORDER BY id ASC LIMIT 1").get();if(first)email=first.email;}
   const row=db.prepare('SELECT id,password_hash,active FROM users WHERE email=?').get(email);
   if(!row||!row.active||!verifyPassword(pw,row.password_hash))return j(res,401,{error:'Invalid email or password'});
   db.prepare('DELETE FROM sessions WHERE expires<?').run(Date.now());

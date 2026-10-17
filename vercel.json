@@ -1,13 +1,30 @@
 {
   "version": 2,
+  "functions": {
+    "api/index.js": {
+      "includeFiles": "storage/**"
+    }
+  },
   "rewrites": [
     {
       "source": "/api/(.*)",
       "destination": "/api/index.js"
     },
     {
-      "source": "/(.*)",
+      "source": "/media/(.*)",
       "destination": "/api/index.js"
+    },
+    {
+      "source": "/admin",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/admin/(.*)",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/((?!api/|media/).*)",
+      "destination": "/index.html"
     }
   ]
 }

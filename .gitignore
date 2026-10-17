@@ -1,0 +1,5 @@
+.env
+.env.local
+*.log
+storage/*-wal
+storage/*-shm
