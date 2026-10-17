@@ -4,16 +4,17 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22.13.0"
+    "node": "22.x"
   },
   "scripts": {
-    "start": "node --env-file-if-exists=.env server.js",
-    "dev": "node --env-file-if-exists=.env --watch server.js",
+    "build": "node --check server.js && node --check api/index.js && node --check public/app.js && node --check public/enhancements.js && node --check public/icons.js",
+    "start": "node server.js",
+    "dev": "node --watch server.js",
     "test": "node tests/integration.mjs",
     "backup": "node scripts/backup.mjs",
     "reset-password": "node scripts/reset-password.mjs",
     "test:frontend": "node tests/frontend-smoke.mjs",
-    "check": "node --check server.js && node --check public/app.js && node --check public/enhancements.js && node --check public/icons.js",
+    "check": "node --check server.js && node --check api/index.js && node --check public/app.js && node --check public/enhancements.js && node --check public/icons.js",
     "prestart": "node scripts/doctor.cjs --prestart",
     "predev": "node scripts/doctor.cjs --prestart",
     "doctor": "node scripts/doctor.cjs",

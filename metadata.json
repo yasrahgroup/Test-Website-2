@@ -1,0 +1,8 @@
+{
+  "name": "AZAROTH — Ideas. Technology. Impact.",
+  "description": "Purposeful software, designed for tomorrow.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

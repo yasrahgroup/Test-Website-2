@@ -1,25 +1,56 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import crypto from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+try { process.loadEnvFile(); } catch {}
 const root = path.dirname(fileURLToPath(import.meta.url));
 const pub = path.join(root, 'public');
-const storage = process.env.STORAGE_DIR || path.join(root, 'storage');
-const dbFile = process.env.DB_PATH || path.join(storage, 'website.sqlite');
-const port = Number(process.env.PORT || 3000);
+let storage = process.env.STORAGE_DIR || (process.env.VERCEL ? path.join(os.tmpdir(), 'storage') : path.join(root, 'storage'));
+let dbFile = process.env.DB_PATH || path.join(storage, 'website.sqlite');
+const port = Number(process.env.APP_PORT || (process.env.PORT && process.env.PORT !== '8080' ? process.env.PORT : 3000));
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
-  throw Error(`Invalid PORT: ${process.env.PORT}. Use a number from 1 to 65535.`);
+  throw Error(`Invalid PORT: ${port}. Use a number from 1 to 65535.`);
 }
 const prod = process.env.NODE_ENV === 'production';
 const siteUrl = (process.env.PUBLIC_URL || 'http://localhost:' + port).replace(/\/$/, '');
-try { fs.mkdirSync(storage, { recursive: true, mode: 0o700 }); }
-catch (err) { throw Error(`Cannot create storage directory ${storage}: ${err.message}. Check STORAGE_DIR and file permissions.`); }
-fs.mkdirSync(path.dirname(dbFile), { recursive: true, mode: 0o700 });
-fs.mkdirSync(path.join(storage, 'media'), { recursive: true, mode: 0o700 });
-fs.mkdirSync(path.join(storage, 'private'), { recursive: true, mode: 0o700 });
+
+function ensureStorage() {
+  try {
+    fs.mkdirSync(storage, { recursive: true, mode: 0o700 });
+    fs.mkdirSync(path.dirname(dbFile), { recursive: true, mode: 0o700 });
+    fs.mkdirSync(path.join(storage, 'media'), { recursive: true, mode: 0o700 });
+    fs.mkdirSync(path.join(storage, 'private'), { recursive: true, mode: 0o700 });
+  } catch (err) {
+    if (err.code === 'EROFS' || err.code === 'EACCES') {
+      console.warn(`[Storage] Read-only filesystem detected at ${storage}. Falling back to temporary directory.`);
+      storage = path.join(os.tmpdir(), 'storage');
+      dbFile = path.join(storage, 'website.sqlite');
+      fs.mkdirSync(storage, { recursive: true, mode: 0o700 });
+      fs.mkdirSync(path.dirname(dbFile), { recursive: true, mode: 0o700 });
+      fs.mkdirSync(path.join(storage, 'media'), { recursive: true, mode: 0o700 });
+      fs.mkdirSync(path.join(storage, 'private'), { recursive: true, mode: 0o700 });
+    } else {
+      throw Error(`Cannot create storage directory ${storage}: ${err.message}. Check STORAGE_DIR and file permissions.`);
+    }
+  }
+}
+ensureStorage();
+
+const repoStorage = path.join(root, 'storage');
+if (path.resolve(storage) !== path.resolve(repoStorage) && fs.existsSync(repoStorage)) {
+  const seedDb = path.join(repoStorage, 'website.sqlite');
+  if (fs.existsSync(seedDb) && !fs.existsSync(dbFile)) {
+    try { fs.copyFileSync(seedDb, dbFile); } catch {}
+  }
+  const seedMedia = path.join(repoStorage, 'media');
+  if (fs.existsSync(seedMedia)) {
+    try { fs.cpSync(seedMedia, path.join(storage, 'media'), { recursive: true }); } catch {}
+  }
+}
 let db;
 try { db = new DatabaseSync(dbFile); }
 catch (err) { throw Error(`Cannot open SQLite database at ${dbFile}: ${err.message}. Check DB_PATH, storage permissions and persistent volume configuration.`); }
@@ -122,9 +153,9 @@ function webHtml(p){const site=settings(),seo=contentSEO(p,site),canonical=siteU
  return template.replace('<title>AZAROTH — Ideas. Technology. Impact.</title>',`<title>${e(seo.title)}</title>`).replace('<meta name="description" content="Purposeful software, designed for tomorrow.">',`<meta name="description" content="${e(seo.description)}"><link rel="canonical" href="${e(canonical)}"><meta property="og:title" content="${e(seo.title)}"><meta property="og:description" content="${e(seo.description)}"><meta property="og:type" content="website"><meta property="og:url" content="${e(canonical)}">`).replace('<div id="app"></div>',`<div id="app">${fallback}</div>`).replace('</head>',`${p==='/admin'?'<meta name=\"robots\" content=\"noindex,nofollow\">':''}</head>`);
 }
 function streamFile(res,file,mime,extra={}){res.writeHead(200,{'Content-Type':mime,'X-Content-Type-Options':'nosniff',...extra});return fs.createReadStream(file).pipe(res);}
-const server=http.createServer(async(req,res)=>{
- res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('X-Frame-Options','DENY');res.setHeader('Referrer-Policy','strict-origin-when-cross-origin');res.setHeader('Permissions-Policy','camera=(), microphone=(), geolocation=(), payment=()');
- res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' https: data:; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'");
+const handleRequest = async(req,res)=>{
+ res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','strict-origin-when-cross-origin');res.setHeader('Permissions-Policy','camera=(), microphone=(), geolocation=(), payment=()');
+ res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' https: data:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https:; frame-ancestors *; object-src 'none'; base-uri 'self'; form-action 'self'");
  if(prod)res.setHeader('Strict-Transport-Security','max-age=31536000; includeSubDomains');
  try{
  const url=new URL(req.url,'http://localhost');const p=url.pathname;const method=req.method;const user=member(req);
@@ -318,7 +349,8 @@ const server=http.createServer(async(req,res)=>{
  }
  return j(res,404,{error:'Not found'});
  }catch(err){console.error('Request error',err);j(res,err.httpCode||500,{error:err.httpCode?err.message:'Server request failed'});}
-});
+};
+const server = http.createServer(handleRequest);
 // Cross-platform entry-point detection: file:// string concatenation fails for
 // Windows paths and directories containing spaces, #, % or Unicode characters.
 // This previously caused the process to exit cleanly WITHOUT starting the app.
@@ -337,4 +369,7 @@ if (invokedAsMain) {
   });
 }
 
-export {server,db,settings};
+export default function handler(req, res) {
+  return handleRequest(req, res);
+}
+export {server,db,settings,handleRequest};

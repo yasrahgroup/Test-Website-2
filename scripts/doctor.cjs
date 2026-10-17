@@ -22,7 +22,7 @@ if (hasEnv) {
     if(match) env[match[1]] = match[2].replace(/^("|')|("|')$/g, '');
   }
 }
-const port = Number(process.env.PORT || env.PORT || 3000);
+const port = Number(process.env.APP_PORT || (process.env.PORT && process.env.PORT !== '8080' ? process.env.PORT : (env.PORT || 3000)));
 if (!Number.isInteger(port) || port <= 0 || port > 65535) {
  console.error('Invalid PORT in environment or .env: expected 1–65535.');
  process.exit(1);
