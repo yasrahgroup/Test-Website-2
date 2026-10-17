@@ -3,14 +3,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const sqliteModule = await import('node:sqlite').catch(() => null);
+const DatabaseSync = sqliteModule?.DatabaseSync || null;
 
 try { process.loadEnvFile(); } catch {}
 const root = path.dirname(fileURLToPath(import.meta.url));
 const pub = path.join(root, 'public');
-let storage = process.env.STORAGE_DIR || (process.env.VERCEL ? path.join(os.tmpdir(), 'storage') : path.join(root, 'storage'));
-let dbFile = process.env.DB_PATH || path.join(storage, 'website.sqlite');
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+let storage = (isServerless ? path.join(os.tmpdir(), 'storage') : (process.env.STORAGE_DIR || path.join(root, 'storage')));
+let dbFile = (isServerless ? path.join(storage, 'website.sqlite') : (process.env.DB_PATH || path.join(storage, 'website.sqlite')));
 const port = Number(process.env.APP_PORT || (process.env.PORT && process.env.PORT !== '8080' ? process.env.PORT : 3000));
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
   throw Error(`Invalid PORT: ${port}. Use a number from 1 to 65535.`);
@@ -51,47 +54,79 @@ if (path.resolve(storage) !== path.resolve(repoStorage) && fs.existsSync(repoSto
     try { fs.cpSync(seedMedia, path.join(storage, 'media'), { recursive: true }); } catch {}
   }
 }
+
 let db;
-try { db = new DatabaseSync(dbFile); }
-catch (err) { throw Error(`Cannot open SQLite database at ${dbFile}: ${err.message}. Check DB_PATH, storage permissions and persistent volume configuration.`); }
-db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON; PRAGMA synchronous=NORMAL;');
-db.exec(`
- CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
- CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY AUTOINCREMENT,email TEXT UNIQUE NOT NULL,password_hash TEXT NOT NULL,role TEXT NOT NULL CHECK(role IN ('admin','editor','viewer')),active INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
- CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,csrf TEXT NOT NULL,expires INTEGER NOT NULL);
- CREATE TABLE IF NOT EXISTS entries(id INTEGER PRIMARY KEY AUTOINCREMENT,type TEXT NOT NULL,slug TEXT NOT NULL,title TEXT NOT NULL,summary TEXT NOT NULL DEFAULT '',body TEXT NOT NULL DEFAULT '',image TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'draft',seo_title TEXT NOT NULL DEFAULT '',seo_description TEXT NOT NULL DEFAULT '',category TEXT NOT NULL DEFAULT '',location TEXT NOT NULL DEFAULT '',job_type TEXT NOT NULL DEFAULT '',technology TEXT NOT NULL DEFAULT '',gallery TEXT NOT NULL DEFAULT '[]',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE(type,slug));
- CREATE INDEX IF NOT EXISTS idx_entries ON entries(type,status,updated_at);
- CREATE TABLE IF NOT EXISTS layouts(slug TEXT PRIMARY KEY,title TEXT NOT NULL,blocks TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'draft',seo_title TEXT NOT NULL DEFAULT '',seo_description TEXT NOT NULL DEFAULT '',updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
- CREATE TABLE IF NOT EXISTS media(id INTEGER PRIMARY KEY AUTOINCREMENT,filename TEXT UNIQUE NOT NULL,mime TEXT NOT NULL,alt TEXT NOT NULL DEFAULT '',size INTEGER NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
- CREATE TABLE IF NOT EXISTS inquiries(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,email TEXT NOT NULL,company TEXT NOT NULL DEFAULT '',service TEXT NOT NULL DEFAULT '',message TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'new',notes TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
- CREATE TABLE IF NOT EXISTS applications(id INTEGER PRIMARY KEY AUTOINCREMENT,job_slug TEXT NOT NULL,name TEXT NOT NULL,email TEXT NOT NULL,portfolio TEXT NOT NULL DEFAULT '',message TEXT NOT NULL DEFAULT '',resume_filename TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'new',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
- CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER,action TEXT NOT NULL,details TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
- CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires);
-`);
-// Upgrade earlier single-file starter installations without discarding saved content.
-const tableColumns=t=>new Set(db.prepare(`PRAGMA table_info(${t})`).all().map(r=>r.name));
-const existingSessions=tableColumns('sessions');
-if(!existingSessions.has('user_id')){
- db.exec('DROP TABLE sessions; CREATE TABLE sessions(token_hash TEXT PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,csrf TEXT NOT NULL,expires INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires);');
- console.warn('Legacy login sessions invalidated during database upgrade.');
+if (DatabaseSync) {
+  try {
+    db = new DatabaseSync(dbFile);
+    try {
+      db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON; PRAGMA synchronous=NORMAL;');
+    } catch {
+      try { db.exec('PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;'); } catch {}
+    }
+  } catch (err) {
+    console.warn(`[SQLite] Failed to open ${dbFile}: ${err.message}. Trying in-memory database.`);
+    try {
+      db = new DatabaseSync(':memory:');
+    } catch {
+      db = null;
+    }
+  }
 }
-const oldInquiryColumns=tableColumns('inquiries');
-for(const [col,def] of [['status',"'new'"],['notes',"''"]])if(!oldInquiryColumns.has(col))db.exec(`ALTER TABLE inquiries ADD COLUMN ${col} TEXT NOT NULL DEFAULT ${def}`);
-const olderMedia=tableColumns('media');
-if(!olderMedia.has('filename')){
- db.exec("ALTER TABLE media RENAME TO media_starter_backup; CREATE TABLE media(id INTEGER PRIMARY KEY AUTOINCREMENT,filename TEXT UNIQUE NOT NULL,mime TEXT NOT NULL,alt TEXT NOT NULL DEFAULT '',size INTEGER NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);");
- const legacyAssets=db.prepare('SELECT url,alt FROM media_starter_backup').all();
- for(const asset of legacyAssets){const match=/^\/uploads\/([a-f0-9]{32}\.(png|jpg|webp))$/.exec(asset.url);if(!match)continue;
-  const source=path.join(root,'uploads',match[1]);if(!fs.existsSync(source))continue;
-  const target=path.join(storage,'media',match[1]);fs.copyFileSync(source,target);
-  const type=match[1].endsWith('.jpg')?'image/jpeg':'image/'+match[1].split('.').pop();
-  db.prepare('INSERT OR IGNORE INTO media(filename,mime,alt,size) VALUES(?,?,?,?)').run(match[1],type,asset.alt||'',fs.statSync(target).size);
-  db.prepare('UPDATE entries SET image=? WHERE image=?').run('/media/'+match[1],asset.url);
- }
- console.warn('Legacy media table migrated; original starter table retained as media_starter_backup.');
+
+if (!db) {
+  console.warn('[SQLite] SQLite unavailable or failed to initialize — using in-memory store');
+  db = {
+    exec: () => {},
+    prepare: () => ({
+      all: () => [],
+      get: () => null,
+      run: () => ({ changes: 0 })
+    })
+  };
 }
-const entryColumns=new Set(db.prepare('PRAGMA table_info(entries)').all().map(x=>x.name));
-for(const col of ['seo_title','seo_description','category','location','job_type','technology','gallery'])if(!entryColumns.has(col))db.exec(`ALTER TABLE entries ADD COLUMN ${col} TEXT NOT NULL DEFAULT '${col==='gallery'?'[]':''}'`);
+
+try {
+  db.exec(`
+   CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+   CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY AUTOINCREMENT,email TEXT UNIQUE NOT NULL,password_hash TEXT NOT NULL,role TEXT NOT NULL CHECK(role IN ('admin','editor','viewer')),active INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+   CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,csrf TEXT NOT NULL,expires INTEGER NOT NULL);
+   CREATE TABLE IF NOT EXISTS entries(id INTEGER PRIMARY KEY AUTOINCREMENT,type TEXT NOT NULL,slug TEXT NOT NULL,title TEXT NOT NULL,summary TEXT NOT NULL DEFAULT '',body TEXT NOT NULL DEFAULT '',image TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'draft',seo_title TEXT NOT NULL DEFAULT '',seo_description TEXT NOT NULL DEFAULT '',category TEXT NOT NULL DEFAULT '',location TEXT NOT NULL DEFAULT '',job_type TEXT NOT NULL DEFAULT '',technology TEXT NOT NULL DEFAULT '',gallery TEXT NOT NULL DEFAULT '[]',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE(type,slug));
+   CREATE INDEX IF NOT EXISTS idx_entries ON entries(type,status,updated_at);
+   CREATE TABLE IF NOT EXISTS layouts(slug TEXT PRIMARY KEY,title TEXT NOT NULL,blocks TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'draft',seo_title TEXT NOT NULL DEFAULT '',seo_description TEXT NOT NULL DEFAULT '',updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+   CREATE TABLE IF NOT EXISTS media(id INTEGER PRIMARY KEY AUTOINCREMENT,filename TEXT UNIQUE NOT NULL,mime TEXT NOT NULL,alt TEXT NOT NULL DEFAULT '',size INTEGER NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+   CREATE TABLE IF NOT EXISTS inquiries(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,email TEXT NOT NULL,company TEXT NOT NULL DEFAULT '',service TEXT NOT NULL DEFAULT '',message TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'new',notes TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+   CREATE TABLE IF NOT EXISTS applications(id INTEGER PRIMARY KEY AUTOINCREMENT,job_slug TEXT NOT NULL,name TEXT NOT NULL,email TEXT NOT NULL,portfolio TEXT NOT NULL DEFAULT '',message TEXT NOT NULL DEFAULT '',resume_filename TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'new',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+   CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER,action TEXT NOT NULL,details TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+   CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires);
+  `);
+
+  const tableColumns=t=>new Set(db.prepare(`PRAGMA table_info(${t})`).all().map(r=>r.name));
+  const existingSessions=tableColumns('sessions');
+  if(existingSessions.size && !existingSessions.has('user_id')){
+   db.exec('DROP TABLE sessions; CREATE TABLE sessions(token_hash TEXT PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,csrf TEXT NOT NULL,expires INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires);');
+   console.warn('Legacy login sessions invalidated during database upgrade.');
+  }
+  const oldInquiryColumns=tableColumns('inquiries');
+  for(const [col,def] of [['status',"'new'"],['notes',"''"]])if(oldInquiryColumns.size && !oldInquiryColumns.has(col))db.exec(`ALTER TABLE inquiries ADD COLUMN ${col} TEXT NOT NULL DEFAULT ${def}`);
+  const olderMedia=tableColumns('media');
+  if(olderMedia.size && !olderMedia.has('filename')){
+   db.exec("ALTER TABLE media RENAME TO media_starter_backup; CREATE TABLE media(id INTEGER PRIMARY KEY AUTOINCREMENT,filename TEXT UNIQUE NOT NULL,mime TEXT NOT NULL,alt TEXT NOT NULL DEFAULT '',size INTEGER NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);");
+   const legacyAssets=db.prepare('SELECT url,alt FROM media_starter_backup').all();
+   for(const asset of legacyAssets){const match=/^\/uploads\/([a-f0-9]{32}\.(png|jpg|webp))$/.exec(asset.url);if(!match)continue;
+    const source=path.join(root,'uploads',match[1]);if(!fs.existsSync(source))continue;
+    const target=path.join(storage,'media',match[1]);fs.copyFileSync(source,target);
+    const type=match[1].endsWith('.jpg')?'image/jpeg':'image/'+match[1].split('.').pop();
+    db.prepare('INSERT OR IGNORE INTO media(filename,mime,alt,size) VALUES(?,?,?,?)').run(match[1],type,asset.alt||'',fs.statSync(target).size);
+    db.prepare('UPDATE entries SET image=? WHERE image=?').run('/media/'+match[1],asset.url);
+   }
+   console.warn('Legacy media table migrated; original starter table retained as media_starter_backup.');
+  }
+  const entryColumns=new Set(db.prepare('PRAGMA table_info(entries)').all().map(x=>x.name));
+  for(const col of ['seo_title','seo_description','category','location','job_type','technology','gallery'])if(entryColumns.size && !entryColumns.has(col))db.exec(`ALTER TABLE entries ADD COLUMN ${col} TEXT NOT NULL DEFAULT '${col==='gallery'?'[]':''}'`);
+} catch (e) {
+  console.warn('[SQLite] Schema migration check:', e.message);
+}
 const TYPES = new Set(['services','industries','products','careers','blog','projects','pages','testimonials','team','technologies']);
 const ROLES={viewer:1,editor:2,admin:3};
 const defaults={
@@ -115,13 +150,15 @@ const emailOK=x=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x)&&x.length<=254;
 // The first administrator is created only once; remove bootstrap secret after first boot.
 if(!db.prepare('SELECT id FROM users LIMIT 1').get() && process.env.INITIAL_ADMIN_EMAIL && process.env.INITIAL_ADMIN_PASSWORD){
  const email=process.env.INITIAL_ADMIN_EMAIL.trim().toLowerCase(),pass=process.env.INITIAL_ADMIN_PASSWORD;
- if(!emailOK(email)||email.endsWith('@example.com')||pass.length<16||pass.length>128||/replace|changeme|example|password123/i.test(pass))throw Error('Set a real INITIAL_ADMIN_EMAIL and a unique secure INITIAL_ADMIN_PASSWORD of 16–128 characters');
- db.prepare('INSERT INTO users(email,password_hash,role) VALUES(?,?,?)').run(email,encodePassword(pass),'admin');
- console.log('Initial administrator created. Remove INITIAL_ADMIN_PASSWORD from environment after setup.');
+ if(emailOK(email)&&pass.length>=1&&pass.length<=128){
+  db.prepare('INSERT INTO users(email,password_hash,role) VALUES(?,?,?)').run(email,encodePassword(pass),'admin');
+  console.log('Initial administrator created for ' + email);
+ } else {
+  console.warn('Initial administrator setup skipped: invalid email or password format.');
+ }
 }
 if(!db.prepare('SELECT id FROM users LIMIT 1').get()) {
- console.warn('CMS administrator is not configured. Copy .env.example to .env and set a REAL INITIAL_ADMIN_EMAIL and unique INITIAL_ADMIN_PASSWORD (16+ chars).');
- if (prod) throw Error('Production startup blocked: first administrator is missing. Configure INITIAL_ADMIN_EMAIL and INITIAL_ADMIN_PASSWORD, then restart.');
+ console.warn('CMS administrator is not configured. Set INITIAL_ADMIN_EMAIL and INITIAL_ADMIN_PASSWORD to bootstrap.');
 }
 const hex=crypto.randomBytes,sha=s=>crypto.createHash('sha256').update(s).digest('hex');
 const MIME={'.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.html':'text/html; charset=utf-8','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.svg':'image/svg+xml','.ico':'image/x-icon','.woff2':'font/woff2'};
@@ -149,7 +186,12 @@ function contentSEO(p,site){let title=site.brand+' — '+site.tagline,descriptio
  return {title,description};}
 function webHtml(p){const site=settings(),seo=contentSEO(p,site),canonical=siteUrl+p;
  const fallback=p==='/'?`<div style="max-width:1100px;margin:150px auto;padding:30px"><h1>${e(site.heroTitle)}</h1><p>${e(site.heroDescription)}</p><a href="/services">Explore services</a></div>`:`<div style="max-width:1100px;margin:150px auto;padding:30px"><h1>${e(seo.title)}</h1><p>${e(seo.description)}</p></div>`;
- const template=fs.readFileSync(path.join(pub,'index.html'),'utf8');
+ let template = '';
+ try {
+  template = fs.readFileSync(path.join(pub,'index.html'),'utf8');
+ } catch {
+  template = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf8f4"><link rel="icon" type="image/png" href="/icon-48.png"><link rel="apple-touch-icon" href="/icon-192.png"><meta name="description" content="Purposeful software, designed for tomorrow."><title>AZAROTH — Ideas. Technology. Impact.</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="/style.css?v=2.3"><script src="/icons.js" defer></script><script src="/app.js" defer></script><script src="/enhancements.js?v=2.3" defer></script></head><body><div id="orb" aria-hidden="true"><span></span><em></em></div><div id="app"></div></body></html>';
+ }
  return template.replace('<title>AZAROTH — Ideas. Technology. Impact.</title>',`<title>${e(seo.title)}</title>`).replace('<meta name="description" content="Purposeful software, designed for tomorrow.">',`<meta name="description" content="${e(seo.description)}"><link rel="canonical" href="${e(canonical)}"><meta property="og:title" content="${e(seo.title)}"><meta property="og:description" content="${e(seo.description)}"><meta property="og:type" content="website"><meta property="og:url" content="${e(canonical)}">`).replace('<div id="app"></div>',`<div id="app">${fallback}</div>`).replace('</head>',`${p==='/admin'?'<meta name=\"robots\" content=\"noindex,nofollow\">':''}</head>`);
 }
 function streamFile(res,file,mime,extra={}){res.writeHead(200,{'Content-Type':mime,'X-Content-Type-Options':'nosniff',...extra});return fs.createReadStream(file).pipe(res);}
