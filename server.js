@@ -60,7 +60,11 @@ if (DatabaseSync) {
   try {
     db = new DatabaseSync(dbFile);
     try {
-      db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON; PRAGMA synchronous=NORMAL;');
+      if (isServerless) {
+        db.exec('PRAGMA journal_mode=MEMORY; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;');
+      } else {
+        db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON; PRAGMA synchronous=NORMAL;');
+      }
     } catch {
       try { db.exec('PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;'); } catch {}
     }
@@ -141,8 +145,17 @@ const ROLES={viewer:1,editor:2,admin:3};
  stats:JSON.stringify([{value:'01',label:'Discover'},{value:'02',label:'Design'},{value:'03',label:'Develop'},{value:'04',label:'Deliver'}]),
  privacyText:'This is starter privacy notice text. Before launch, replace it with a privacy policy reviewed for your jurisdiction, data practices, contact forms and retention periods.',termsText:'This is starter terms-of-use text. Replace it with approved company terms before public launch.'
 };
-const selSetting=db.prepare('SELECT key,value FROM settings');
-function settings(){const data={...defaults};for(const row of selSetting.all())data[row.key]=row.value;return data;}
+function settings(){
+  const data={...defaults};
+  try{
+    if(db){
+      for(const row of db.prepare('SELECT key,value FROM settings').all())data[row.key]=row.value;
+    }
+  }catch(e){
+    console.warn('[Settings] Reading settings fallback:', e.message);
+  }
+  return data;
+}
 function audit(user,action,details=''){db.prepare('INSERT INTO audit(user_id,action,details) VALUES(?,?,?)').run(user||null,action,String(details).slice(0,700));}
 function encodePassword(password){const salt=crypto.randomBytes(16);const hash=crypto.scryptSync(password,salt,64);return salt.toString('hex')+':'+hash.toString('hex');}
 function verifyPassword(password,record){try{const [salt,expected]=record.split(':');const h=crypto.scryptSync(password,Buffer.from(salt,'hex'),64);return crypto.timingSafeEqual(h,Buffer.from(expected,'hex'));}catch{return false;}}
@@ -203,8 +216,17 @@ const handleRequest = async(req,res)=>{
  res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' https: data:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https:; frame-ancestors *; object-src 'none'; base-uri 'self'; form-action 'self'");
  if(prod)res.setHeader('Strict-Transport-Security','max-age=31536000; includeSubDomains');
  try{
- const rawUrl=req.headers['x-matched-path']||req.headers['x-vercel-matched-path']||req.headers['x-forwarded-url']||req.originalUrl||req.url;
- const url=new URL(rawUrl,'http://localhost');let p=url.pathname;if(p.length>1&&p.endsWith('/'))p=p.slice(0,-1);const method=req.method;const user=member(req);
+  let requestUrl=req.url;
+  try{
+   const check=new URL(requestUrl,'http://localhost');
+   const forwarded=check.searchParams.get('__url')||check.searchParams.get('url');
+   if(forwarded){
+    check.searchParams.delete('__url');check.searchParams.delete('url');
+    const rest=check.searchParams.toString();
+    requestUrl=forwarded+(rest?'?'+rest:'');
+   }
+  }catch{}
+  const url=new URL(requestUrl,'http://localhost');let p=url.pathname;if(p.length>1&&p.endsWith('/'))p=p.slice(0,-1);const method=req.method;const user=member(req);
  if(method==='GET'&&p==='/api/health')return j(res,200,{ok:true,db:true});
  if(method==='GET'&&p==='/api/content')return j(res,200,settings());
  if(method==='GET'&&p==='/api/layouts'){

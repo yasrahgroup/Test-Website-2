@@ -197,5 +197,5 @@ initCursor=function(){
  frame();
 };
 // Initialize only after every override has been registered.
-fetch('/api/content').then(r=>{if(!r.ok)throw Error('Site content unavailable');return r.json()}).then(async data=>{content=data;await refreshEntries();render();initCursor()}).catch(err=>{const root=document.querySelector('#app');if(root)root.innerHTML='<main class=\"load-error\" role=\"alert\">Unable to load website content. Please check the server.</main>';console.error(err)});
+fetch('/api/content').then(r=>{if(!r.ok)throw Error('Site content unavailable ('+r.status+')');return r.json()}).then(async data=>{content=data;await refreshEntries();render();initCursor()}).catch(err=>{console.error('[Content Load Error]:',err);if(!content||!content.brand){content={brand:'AZAROTH',brandTitle:'AZAROTH',brandSubtitle:'TECHHIVE',tagline:'Ideas. Technology. Impact.',footerBrandTitle:'AZAROTH',footerBrandSubtitle:'TECHHIVE',primary:'#900b2b',gold:'#d5a13c',orange:'#f47721',background:'#faf8f4',ink:'#171b2c'};render();initCursor();}});
 })();

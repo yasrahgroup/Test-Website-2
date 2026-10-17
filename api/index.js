@@ -2,10 +2,18 @@ import handler from '../server.js';
 
 export default async function (req, res) {
   try {
-    const originalPath = req.headers['x-matched-path'] || req.headers['x-vercel-matched-path'] || req.headers['x-forwarded-url'] || req.originalUrl;
-    if (originalPath) {
-      req.url = originalPath;
-    }
+    let requestUrl = req.url;
+    try {
+      const check = new URL(requestUrl, 'http://localhost');
+      const forwarded = check.searchParams.get('__url') || check.searchParams.get('url');
+      if (forwarded) {
+        check.searchParams.delete('__url');
+        check.searchParams.delete('url');
+        const rest = check.searchParams.toString();
+        requestUrl = forwarded + (rest ? '?' + rest : '');
+      }
+    } catch {}
+    req.url = requestUrl;
     return await handler(req, res);
   } catch (err) {
     console.error('[Vercel Error]:', err);
