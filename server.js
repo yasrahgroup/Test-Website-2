@@ -44,7 +44,7 @@ function ensureStorage() {
 ensureStorage();
 
 const repoStorage = path.join(root, 'storage');
-if (path.resolve(storage) !== path.resolve(repoStorage) && fs.existsSync(repoStorage)) {
+if (process.env.NODE_ENV !== 'test' && path.resolve(storage) !== path.resolve(repoStorage) && fs.existsSync(repoStorage)) {
   const seedDb = path.join(repoStorage, 'website.sqlite');
   if (fs.existsSync(seedDb) && !fs.existsSync(dbFile)) {
     try { fs.copyFileSync(seedDb, dbFile); } catch {}
@@ -182,7 +182,7 @@ function j(res,code,obj,h={}){res.writeHead(code,{'Content-Type':'application/js
 const e=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const str=(x,max)=>String(x??'').trim().slice(0,max);
 const slugOK=x=>typeof x==='string'&&x.length<=110&&/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(x);
-const imgOK=x=>x===''||x==='/logo.png'||(/^\/media\/[a-f0-9]{32}\.(png|jpg|webp)$/.test(x)||/^https:\/\/[\w.-]+(?:\/[^\s"'<>]*)?$/.test(x));
+const imgOK=x=>x===''||/^\/(logo|logo-source|icon-48|icon-192|icon-512)\.png$/.test(x)||(/^\/media\/[a-f0-9]{32}\.(png|jpg|webp)$/.test(x)||/^https:\/\/[\w.-]+(?:\/[^\s"'<>]*)?$/.test(x));
 function cookies(req){const out={};for(const segment of (req.headers.cookie||'').split(';')){const pos=segment.indexOf('=');if(pos>0)out[segment.slice(0,pos).trim()]=segment.slice(pos+1).trim();}return out;}
 function member(req){const token=cookies(req).sid;if(!token||!/^[a-f0-9]{64}$/.test(token))return null;return db.prepare('SELECT u.id,u.email,u.role,s.csrf,s.expires FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND u.active=1').get(sha(token))||null;}
 function allowed(req,member,role='viewer'){return !!member&&member.expires>Date.now()&&ROLES[member.role]>=ROLES[role];}
@@ -206,7 +206,7 @@ function webHtml(p){const site=settings(),seo=contentSEO(p,site),canonical=siteU
  try {
   template = fs.readFileSync(path.join(pub,'index.html'),'utf8');
  } catch {
-  template = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf8f4"><link rel="icon" type="image/png" href="/icon-48.png"><link rel="apple-touch-icon" href="/icon-192.png"><meta name="description" content="Purposeful software, designed for tomorrow."><title>AZAROTH — Ideas. Technology. Impact.</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="/style.css?v=2.3"><script src="/icons.js" defer></script><script src="/app.js" defer></script><script src="/enhancements.js?v=2.3" defer></script></head><body><div id="orb" aria-hidden="true"><span></span><em></em></div><div id="app"></div></body></html>';
+  template = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#faf8f4"><link rel="icon" type="image/png" href="/icon-48.png"><link rel="apple-touch-icon" href="/icon-192.png"><meta name="description" content="Purposeful software, designed for tomorrow."><title>AZAROTH — Ideas. Technology. Impact.</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="/style.css?v=2.6"><script src="/icons.js?v=2.6" defer></script><script src="/app.js?v=2.6" defer></script><script src="/enhancements.js?v=2.6" defer></script></head><body><div id="orb" aria-hidden="true"><span></span><em></em></div><div id="app"></div></body></html>';
  }
  return template.replace('<title>AZAROTH — Ideas. Technology. Impact.</title>',`<title>${e(seo.title)}</title>`).replace('<meta name="description" content="Purposeful software, designed for tomorrow.">',`<meta name="description" content="${e(seo.description)}"><link rel="canonical" href="${e(canonical)}"><meta property="og:title" content="${e(seo.title)}"><meta property="og:description" content="${e(seo.description)}"><meta property="og:type" content="website"><meta property="og:url" content="${e(canonical)}">`).replace('<div id="app"></div>',`<div id="app">${fallback}</div>`).replace('</head>',`${p==='/admin'?'<meta name=\"robots\" content=\"noindex,nofollow\">':''}</head>`);
 }
@@ -286,13 +286,18 @@ const handleRequest = async(req,res)=>{
    if(!allowed(req,user,'admin'))return j(res,403,{error:'Admin required'});
    const x=await jsonBody(req,200000),put=db.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value');
    const allowedKeys=new Set(Object.keys(defaults));const edits=[];
-   for(const [k,v] of Object.entries(x)){if(!allowedKeys.has(k)||typeof v!=='string'||v.length>60000)return j(res,400,{error:'Invalid setting: '+k});
+   for(const [k,val] of Object.entries(x)){if(!allowedKeys.has(k)||typeof val!=='string'||val.length>60000)return j(res,400,{error:'Invalid setting: '+k});
+    let v=val;
     if(['services','industries','stats','navigation','socials'].includes(k)){let parsed;try{parsed=JSON.parse(v)}catch{return j(res,400,{error:k+' must contain valid JSON'})}if(!Array.isArray(parsed)||parsed.length>100)return j(res,400,{error:'Invalid array in '+k});}
-    if(['primary','gold','orange','background','ink'].includes(k)&&!/^#[0-9a-fA-F]{6}$/.test(v))return j(res,400,{error:'Invalid colour'});
+    if(['primary','gold','orange','background','ink'].includes(k)){
+     v=v.trim();
+     if(/^#[0-9a-fA-F]{3}$/.test(v))v='#'+v[1]+v[1]+v[2]+v[2]+v[3]+v[3];
+     if(!/^#[0-9a-fA-F]{6}$/.test(v))return j(res,400,{error:'Invalid colour'});
+    }
     if(k==='cursorStyle'&&!['gold-ring','gold-orbit','micro-dot','glass-outline'].includes(v))return j(res,400,{error:'Invalid cursor style'});
     if(k==='logo'&&!imgOK(v))return j(res,400,{error:'Invalid logo URL'});
     edits.push([k,v]);}
-   db.exec('BEGIN');try{for(const [k,v] of edits)put.run(k,v);db.exec('COMMIT');}catch(err){db.exec('ROLLBACK');throw err;}
+   db.exec('BEGIN');try{for(const [k,v] of edits)put.run(k,v);db.exec('COMMIT');try{db.exec('PRAGMA wal_checkpoint(PASSIVE);');}catch{}}catch(err){db.exec('ROLLBACK');throw err;}
    audit(user.id,'settings.saved',edits.map(x=>x[0]).join(','));return j(res,200,{ok:true});
   }
   if(p==='/api/admin/entries'&&method==='GET'){

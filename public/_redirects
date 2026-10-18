@@ -1,0 +1,4 @@
+# Cloudflare Pages SPA Fallback and Route Rewrites
+/api/*     /api/:splat    200
+/media/*   /media/:splat  200
+/*         /index.html    200

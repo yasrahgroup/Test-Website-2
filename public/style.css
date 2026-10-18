@@ -271,3 +271,69 @@ html[data-cursor-style="glass-outline"] #orb.hover{background:radial-gradient(ci
 .setting-help{display:block;color:var(--muted);font-size:12px;line-height:1.6;margin-top:6px}
 @media(max-width:600px){.cursor-style-previews{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(hover:none),(pointer:coarse),(prefers-reduced-motion:reduce){#orb{display:none!important}body.custom-cursor,body.custom-cursor a,body.custom-cursor button{cursor:auto!important}}
+
+/* ===== CMS Enhanced Polish & Luxury Styling ===== */
+h1, h2, h3, h4, .hero h1, .section-head h2, .prose-block h2 {
+  color: var(--ink, #171b2c) !important;
+  -webkit-text-fill-color: var(--ink, #171b2c) !important;
+}
+
+.accent, .hero h1 .accent, h1 .accent, h2 .accent, h3 .accent, .section-head h2 .accent {
+  color: var(--orange, #ed792a) !important;
+  -webkit-text-fill-color: var(--orange, #ed792a) !important;
+  background: none !important;
+  display: inline !important;
+  font-weight: 800;
+}
+
+.hero .eyebrow {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .24em;
+  color: #8e7480;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+}
+
+.hero h1 {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: clamp(2.9rem, 5.2vw, 5.9rem);
+  line-height: 1.15;
+  letter-spacing: -0.045em;
+  font-weight: 800;
+  margin: 14px 0 24px;
+  color: var(--ink, #171b2c) !important;
+  -webkit-text-fill-color: var(--ink, #171b2c) !important;
+}
+
+.admin-toast{position:fixed;bottom:28px;right:28px;z-index:9999;display:flex;align-items:center;gap:16px;background:#171b2ceb;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);color:#fff;padding:14px 22px;border-radius:14px;box-shadow:0 16px 45px rgba(23,27,44,.28);border:1px solid rgba(255,255,255,.12);transform:translateY(100px);opacity:0;pointer-events:none;transition:transform .35s cubic-bezier(.16,1,.3,1),opacity .25s ease;font-size:13.5px;font-weight:500}
+.admin-toast.show{transform:translateY(0);opacity:1;pointer-events:auto}
+.admin-toast.error{background:#910b2ceb;border-color:rgba(255,100,100,.3)}
+.admin-toast .toast-content{display:flex;align-items:center;gap:10px}
+.admin-toast .toast-content i,.admin-toast .toast-content svg{width:18px;height:18px;color:#55e69e;flex-shrink:0}
+.admin-toast.error .toast-content i,.admin-toast.error .toast-content svg{color:#ff9494}
+.admin-toast .toast-link{color:var(--gold,#d5a13c);font-weight:700;text-decoration:underline;text-underline-offset:3px;margin-left:8px;white-space:nowrap}
+.admin-toast .toast-link:hover{color:#fff}
+
+.admin-welcome{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;background:#fff;border:1px solid #eee8df;border-radius:20px;padding:16px 24px;margin-bottom:24px;box-shadow:0 4px 20px rgba(0,0,0,.03)}
+.admin-user-badge{display:flex;align-items:center;gap:14px}
+.user-avatar{width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,var(--burgundy,#910b2c),#5a071b);color:#fff;display:grid;place-items:center;box-shadow:0 4px 12px rgba(145,11,44,.25)}
+.user-avatar svg,.user-avatar i{width:22px;height:22px}
+.user-name{font-size:13.5px;color:var(--ink,#171b2c)}
+.role-pill{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.1em;padding:3px 9px;border-radius:20px;background:#f0f4f8;color:#486581;margin-top:3px}
+.role-pill.admin{background:#fdf3dc;color:#946200}
+.admin-welcome-actions{display:flex;align-items:center;gap:10px}
+.pill.mini{padding:8px 16px;font-size:12px;border-radius:50px}
+.pill.mini.danger{color:#b3261e;border-color:#f6c8c4}
+.pill.mini.danger:hover{background:#feecea}
+.admin-sidebar button{display:flex;align-items:center;gap:12px;font-weight:600;transition:all .2s ease}
+.admin-sidebar button svg,.admin-sidebar button i{width:17px;height:17px;opacity:.75}
+.admin-sidebar button.active svg,.admin-sidebar button.active i{opacity:1;color:var(--burgundy,#910b2c)}
+.admin-section-card{background:#fdfbf8;border:1px solid #f0e9df;border-radius:16px;padding:24px;margin-bottom:24px}
+.admin-section-card h4{margin:0 0 6px;font-size:15px;font-weight:800;color:var(--ink,#171b2c)}
+.admin-section-card p{font-size:12.5px;margin:0 0 16px;color:var(--muted,#667084)}
+.setting-callout{background:#fff8eb;border-left:3px solid var(--gold,#d5a13c);padding:10px 14px;border-radius:0 8px 8px 0;font-size:12px;color:#7a5416;margin:12px 0 16px;line-height:1.5}
+.color-picker-group{display:flex;align-items:center;gap:12px}
+.color-swatch-input{width:44px;height:44px;padding:0;border:2px solid #ddd;border-radius:10px;cursor:pointer;background:none;flex-shrink:0}
+

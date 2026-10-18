@@ -1,0 +1,12 @@
+# Cloudflare Tunnel Production Configuration
+# Run: cloudflared tunnel --config cloudflare-tunnel.example.yml run
+tunnel: <TUNNEL_UUID_OR_NAME>
+credentials-file: /etc/cloudflared/<TUNNEL_UUID>.json
+
+ingress:
+  - hostname: azaroth.tech
+    service: http://localhost:3000
+    originRequest:
+      noTLSVerify: false
+      connectTimeout: 30s
+  - service: http_status:404

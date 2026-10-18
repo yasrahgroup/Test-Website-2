@@ -1,0 +1,21 @@
+# Cloudflare Pages / Workers Production Configuration
+# Azaroth Corporate CMS & Web Platform
+name = "azaroth-corporate-cms"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "public"
+
+[vars]
+NODE_ENV = "production"
+STORAGE_DIR = "/tmp/storage"
+PUBLIC_URL = "https://azaroth.tech"
+
+# Production environment overrides
+[env.production]
+name = "azaroth-corporate-cms-prod"
+vars = { NODE_ENV = "production", STORAGE_DIR = "/tmp/storage" }
+
+# Preview / Staging environment overrides
+[env.preview]
+name = "azaroth-corporate-cms-preview"
+vars = { NODE_ENV = "preview", STORAGE_DIR = "/tmp/storage" }

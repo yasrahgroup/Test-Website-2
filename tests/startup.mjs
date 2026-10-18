@@ -6,8 +6,9 @@ const root = path.resolve(import.meta.dirname, '..');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'azaroth startup checks '));
 const appDir = path.join(temp, 'Azaroth Website #1 é');
 fs.mkdirSync(appDir);
+function copyDir(s,d){fs.mkdirSync(d,{recursive:true});for(const e of fs.readdirSync(s,{withFileTypes:true})){const sp=path.join(s,e.name),dp=path.join(d,e.name);if(e.isDirectory())copyDir(sp,dp);else fs.copyFileSync(sp,dp);}}
 for(const name of ['server.js','package.json','.env.example']) fs.copyFileSync(path.join(root,name),path.join(appDir,name));
-for(const name of ['public','scripts']) fs.cpSync(path.join(root,name),path.join(appDir,name),{recursive:true});
+for(const name of ['public','scripts']) copyDir(path.join(root,name),path.join(appDir,name));
 const id=Math.floor(Math.random()*15000);
 const pass='secure-startup-check-keyphrase-0123456789';
 const email='admin@startup-test.example';
@@ -46,7 +47,7 @@ try {
   fs.writeFileSync(path.join(appDir,'.env'),`PORT=${portTwo}\nPUBLIC_URL=${endpointTwo}\nSTORAGE_DIR=${path.join(temp,'storage from env')}\nINITIAL_ADMIN_EMAIL=${email}\nINITIAL_ADMIN_PASSWORD=${pass}\n`);
   const npmCommand=process.platform==='win32'?'npm.cmd':'npm';
   const npmEnv={...process.env,NODE_ENV:'test'};for(const key of ['PORT','STORAGE_DIR','PUBLIC_URL','INITIAL_ADMIN_EMAIL','INITIAL_ADMIN_PASSWORD'])delete npmEnv[key];
-  processTwo=spawn(npmCommand,['start'],{cwd:appDir,env:npmEnv,detached:process.platform!=='win32',stdio:['ignore','pipe','pipe']});
+  processTwo=spawn(npmCommand,['start'],{cwd:appDir,env:npmEnv,detached:process.platform!=='win32',stdio:['ignore','pipe','pipe'],shell:process.platform==='win32'});
   await waitFor(endpointTwo,processTwo,'npm start with .env');
   r=await fetch(endpointTwo+'/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password:pass})});
   if(r.status!==200)throw Error('Auto-loaded .env or CMS login failed');
@@ -66,5 +67,6 @@ try {
  await stop(processOne);
  await stop(processTwo);
  await stop(processThree);
- fs.rmSync(temp,{recursive:true,force:true});
+ await new Promise(r=>setTimeout(r,150));
+ try{fs.rmSync(temp,{recursive:true,force:true,maxRetries:10,retryDelay:200})}catch{}
 }
