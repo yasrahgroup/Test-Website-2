@@ -2,19 +2,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
-import {createTestDatabaseScope} from './test-database.mjs';
 const root = path.resolve(import.meta.dirname, '..');
-const testDatabase=await createTestDatabaseScope();
-const testEnv={...process.env,DATABASE_URL:'',DATABASE_URL_UNPOOLED:'',TEST_DATABASE_URL:testDatabase.connectionString};
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'azaroth startup checks '));
 const appDir = path.join(temp, 'Azaroth Website #1 é');
 fs.mkdirSync(appDir);
 function copyDir(s,d){fs.mkdirSync(d,{recursive:true});for(const e of fs.readdirSync(s,{withFileTypes:true})){const sp=path.join(s,e.name),dp=path.join(d,e.name);if(e.isDirectory())copyDir(sp,dp);else fs.copyFileSync(sp,dp);}}
 for(const name of ['server.js','package.json','.env.example']) fs.copyFileSync(path.join(root,name),path.join(appDir,name));
-for(const name of ['public','scripts','lib']) copyDir(path.join(root,name),path.join(appDir,name));
-// server.js imports runtime dependencies, so make the installed packages available in the copy.
-try { fs.symlinkSync(path.join(root,'node_modules'),path.join(appDir,'node_modules'),'junction'); }
-catch { copyDir(path.join(root,'node_modules'),path.join(appDir,'node_modules')); }
+for(const name of ['public','scripts']) copyDir(path.join(root,name),path.join(appDir,name));
 const id=Math.floor(Math.random()*15000);
 const pass='secure-startup-check-keyphrase-0123456789';
 const email='admin@startup-test.example';
@@ -22,12 +16,10 @@ async function waitFor(url,proc,label) {
  let output='';
  proc.stdout?.on('data',x=>output+=x.toString());
  proc.stderr?.on('data',x=>output+=x.toString());
- // Boot against a remote managed Postgres performs many sequential round trips
- // (schema, upgrades, bootstrap); allow up to two minutes before declaring failure.
- for(let i=0;i<480;i++) {
+ for(let i=0;i<70;i++) {
   if(proc.exitCode!==null) throw Error(`${label} exited (${proc.exitCode}): ${output}`);
   try { const r=await fetch(url+'/api/health'); if(r.status===200) return output; }catch{}
-  await new Promise(r=>setTimeout(r,250));
+  await new Promise(r=>setTimeout(r,100));
  }
  throw Error(`${label} never began listening. Logs: ${output}`);
 }
@@ -41,10 +33,10 @@ let processOne,processTwo,processThree;
 try {
   const portOne=44000+id,storageOne=path.join(temp,'storage direct');
   const endpointOne=`http://127.0.0.1:${portOne}`;
-  processOne=spawn(process.execPath,[path.join(appDir,'server.js')],{cwd:appDir,env:{...testEnv,PORT:String(portOne),PUBLIC_URL:endpointOne,STORAGE_DIR:storageOne,INITIAL_ADMIN_EMAIL:email,INITIAL_ADMIN_PASSWORD:pass,NODE_ENV:'test'},stdio:['ignore','pipe','pipe']});
+  processOne=spawn(process.execPath,[path.join(appDir,'server.js')],{cwd:appDir,env:{...process.env,PORT:String(portOne),PUBLIC_URL:endpointOne,STORAGE_DIR:storageOne,INITIAL_ADMIN_EMAIL:email,INITIAL_ADMIN_PASSWORD:pass,NODE_ENV:'test'},stdio:['ignore','pipe','pipe']});
   await waitFor(endpointOne,processOne,'direct server.js startup');
   let r=await fetch(endpointOne+'/');
-  if(r.status!==200||!(await r.text()).includes('Intelligence, Engineered'))throw Error('Direct start homepage did not respond');
+  if(r.status!==200||!(await r.text()).includes('Innovative Software'))throw Error('Direct start homepage did not respond');
   console.log('✓ node server.js starts with spaces, # and Unicode in project folder');
   r=await fetch(endpointOne+'/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password:pass})});
   if(r.status!==200)throw Error('Direct start administrator login failed');
@@ -54,7 +46,7 @@ try {
   const endpointTwo=`http://127.0.0.1:${portTwo}`;
   fs.writeFileSync(path.join(appDir,'.env'),`PORT=${portTwo}\nPUBLIC_URL=${endpointTwo}\nSTORAGE_DIR=${path.join(temp,'storage from env')}\nINITIAL_ADMIN_EMAIL=${email}\nINITIAL_ADMIN_PASSWORD=${pass}\n`);
   const npmCommand=process.platform==='win32'?'npm.cmd':'npm';
-  const npmEnv={...testEnv,NODE_ENV:'test'};for(const key of ['PORT','STORAGE_DIR','PUBLIC_URL','INITIAL_ADMIN_EMAIL','INITIAL_ADMIN_PASSWORD'])delete npmEnv[key];
+  const npmEnv={...process.env,NODE_ENV:'test'};for(const key of ['PORT','STORAGE_DIR','PUBLIC_URL','INITIAL_ADMIN_EMAIL','INITIAL_ADMIN_PASSWORD'])delete npmEnv[key];
   processTwo=spawn(npmCommand,['start'],{cwd:appDir,env:npmEnv,detached:process.platform!=='win32',stdio:['ignore','pipe','pipe'],shell:process.platform==='win32'});
   await waitFor(endpointTwo,processTwo,'npm start with .env');
   r=await fetch(endpointTwo+'/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password:pass})});
@@ -64,7 +56,7 @@ try {
   const portThree=portTwo+1;
   const endpointThree=`http://127.0.0.1:${portThree}`;
   processThree=spawn(process.execPath,[path.join(appDir,'server.js')],{
-    cwd:appDir,env:{...testEnv,DATABASE_URL:testDatabase.connectionString,PORT:String(portThree),PUBLIC_URL:'https://company.example.test',STORAGE_DIR:path.join(temp,'production storage'),INITIAL_ADMIN_EMAIL:email,INITIAL_ADMIN_PASSWORD:pass,NODE_ENV:'production'},stdio:['ignore','pipe','pipe']});
+    cwd:appDir,env:{...process.env,PORT:String(portThree),PUBLIC_URL:'https://company.example.test',STORAGE_DIR:path.join(temp,'production storage'),INITIAL_ADMIN_EMAIL:email,INITIAL_ADMIN_PASSWORD:pass,NODE_ENV:'production'},stdio:['ignore','pipe','pipe']});
   await waitFor(endpointThree,processThree,'production-mode startup');
   r=await fetch(endpointThree+'/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password:pass})});
   if(r.status!==200 || !r.headers.get('set-cookie')?.includes('Secure'))throw Error('Production session or login startup failed');
@@ -77,5 +69,4 @@ try {
  await stop(processThree);
  await new Promise(r=>setTimeout(r,150));
  try{fs.rmSync(temp,{recursive:true,force:true,maxRetries:10,retryDelay:200})}catch{}
- await testDatabase.close();
 }

@@ -2,10 +2,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { createTestDatabaseScope } from './test-database.mjs';
 
 const base = path.resolve(import.meta.dirname, '..');
-const testDatabase = await createTestDatabaseScope();
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'azaroth-parity-test-'));
 const port = 36000 + Math.floor(Math.random() * 10000);
 const endpoint = 'http://127.0.0.1:' + port;
@@ -16,9 +14,7 @@ const variables = {
   PORT: String(port),
   PUBLIC_URL: endpoint,
   STORAGE_DIR: temp,
-  DATABASE_URL: '',
-  DATABASE_URL_UNPOOLED: '',
-  TEST_DATABASE_URL: testDatabase.connectionString,
+  DB_PATH: path.join(temp, 'website.sqlite'),
   INITIAL_ADMIN_EMAIL: adminEmail,
   INITIAL_ADMIN_PASSWORD: adminPass,
   NODE_ENV: 'test'
@@ -284,5 +280,4 @@ try {
     });
   }
   fs.rmSync(temp, { recursive: true, force: true });
-  await testDatabase.close();
 }

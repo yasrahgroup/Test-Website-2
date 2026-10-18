@@ -3,16 +3,14 @@ import os from 'node:os';
 import path from 'node:path';
 import {spawn,spawnSync} from 'node:child_process';
 import crypto from 'node:crypto';
-import {createTestDatabaseScope} from './test-database.mjs';
 const base=path.resolve(import.meta.dirname,'..');
-const testDatabase=await createTestDatabaseScope();
 const temp=fs.mkdtempSync(path.join(os.tmpdir(),'azaroth-cms-test-'));
 const port=35000+Math.floor(Math.random()*10000);
 const endpoint='http://127.0.0.1:'+port;
 const adminEmail='admin@test.example';
 const adminPass='test-integration-password-very-secure-123';
 const editorPass='editor-integration-password-very-secure';
-const variables={...process.env,DATABASE_URL:'',DATABASE_URL_UNPOOLED:'',TEST_DATABASE_URL:testDatabase.connectionString,PORT:String(port),PUBLIC_URL:endpoint,STORAGE_DIR:temp,INITIAL_ADMIN_EMAIL:adminEmail,INITIAL_ADMIN_PASSWORD:adminPass,NODE_ENV:'test'};
+const variables={...process.env,PORT:String(port),PUBLIC_URL:endpoint,STORAGE_DIR:temp,DB_PATH:path.join(temp,'website.sqlite'),INITIAL_ADMIN_EMAIL:adminEmail,INITIAL_ADMIN_PASSWORD:adminPass,NODE_ENV:'test'};
 let proc=null,cookies='',csrf='';
 const assert=(condition,msg)=>{if(!condition)throw Error('FAILED: '+msg);console.log('✓',msg)};
 async function req(url,method='GET',obj,auth=true,withCsrf=true){const response=await fetch(endpoint+url,{method,headers:{...(obj?{'Content-Type':'application/json'}:{}),...(auth&&cookies?{'Cookie':cookies}:{}),...(auth&&withCsrf&&csrf&&method!=='GET'?{'X-CSRF-Token':csrf}:{})},body:obj?JSON.stringify(obj):undefined});const text=await response.text();let body;try{body=JSON.parse(text)}catch{body=text}return {status:response.status,body,headers:response.headers};}
@@ -72,7 +70,7 @@ try{
  r=await req('/api/jobs/apply','POST',{job:'software-engineer',name:'Candidate',email:'candidate@example.org',message:'My application',portfolio:'https://example.org',consent:true,resume:'data:application/pdf;base64,'+pdf},false);assert(r.status===200,'Job application and PDF resume saved');
  r=await req('/api/admin/applications');assert(r.status===200&&r.body.length===1,'Career applications available in CMS');
  r=await req('/api/admin/resume?id='+r.body[0].id);assert(r.status===200,'Authorized résumé download');
- const snapshot=path.join(temp,'test-snapshot');const backup=spawnSync(process.execPath,['scripts/backup.mjs',snapshot],{cwd:base,env:variables,encoding:'utf8'});assert(backup.status===0&&fs.existsSync(path.join(snapshot,'database-backup.json'))&&fs.existsSync(path.join(snapshot,'private')),'Database, public media and private résumés backup correctly');
+ const snapshot=path.join(temp,'test-snapshot');const backup=spawnSync(process.execPath,['scripts/backup.mjs',snapshot],{cwd:base,env:variables,encoding:'utf8'});assert(backup.status===0&&fs.existsSync(path.join(snapshot,'website.sqlite'))&&fs.existsSync(path.join(snapshot,'private')),'Database, public media and private résumés backup correctly');
  r=await req('/api/admin/resume?id=1','GET',null,false);assert(r.status===401,'Private résumé is protected from anonymous access');
  r=await req('/api/admin/users','POST',{email:'editor@test.example',password:editorPass,role:'editor'});assert(r.status===200,'Multi-user CMS creates editor');
  const adminCookie=cookies,adminCsrf=csrf;
@@ -93,4 +91,4 @@ try{
  const restored={...variables,INITIAL_ADMIN_EMAIL:'',INITIAL_ADMIN_PASSWORD:''};await boot(restored);r=await req('/api/content');assert(r.body.brand==='Azaroth Software','Site data survives full server restart');
  r=await req('/api/entries?type=blog');assert(r.body.length===1,'Published CMS content survives restart');
  console.log('\nALL PRODUCTION INTEGRATION TESTS PASSED');
-}catch(err){console.error(err);process.exitCode=1;}finally{if(proc){proc.kill();await new Promise(resolve=>{proc.once('exit',resolve);setTimeout(resolve,1000).unref()})}fs.rmSync(temp,{recursive:true,force:true});await testDatabase.close();}
+}catch(err){console.error(err);process.exitCode=1;}finally{if(proc){proc.kill();await new Promise(resolve=>{proc.once('exit',resolve);setTimeout(resolve,1000).unref()})}fs.rmSync(temp,{recursive:true,force:true});}
