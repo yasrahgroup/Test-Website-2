@@ -3,6 +3,12 @@
 *.log
 node_modules/
 scratch/
-storage/*-wal
-storage/*-shm
+storage/*.sqlite
+storage/*.sqlite-shm
+storage/*.sqlite-wal
+storage/media/
+storage/private/
+storage/migration-backups/
+storage/database-backup.json
+.kilo/
 

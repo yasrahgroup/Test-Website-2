@@ -31,7 +31,18 @@ const common={
  'instagram':'<rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="18" cy="6" r="1"/>',
  'linkedin':'<rect x="2" y="2" width="20" height="20" rx="2"/><path d="M7 10v8m0-11v.1M12 18v-8m0 3a3 3 0 0 1 6 0v5"/>',
  'github':'<path d="M9 20c-5 2-5-2-7-3m17 3v-3c0-1 0-2-1-3 5 0 6-7 3-9-2 0-4 1-4 1-3-1-7-1-10 0 0 0-2-1-4-1-3 2-2 9 3 9-1 1-1 2-1 3v3"/>',
- 'file-text':'<path d="M5 2h10l5 5v15H5V2Zm10 0v6h5M8 12h9M8 16h9"/>','image':'<rect x="2" y="3" width="20" height="18" rx="2"/><circle cx="8" cy="9" r="2"/><path d="m2 18 6-6 4 4 4-6 6 8"/>','settings':'<circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M19 5l-2 2M7 17l-2 2"/>'
+ 'file-text':'<path d="M5 2h10l5 5v15H5V2Zm10 0v6h5M8 12h9M8 16h9"/>','image':'<rect x="2" y="3" width="20" height="18" rx="2"/><circle cx="8" cy="9" r="2"/><path d="m2 18 6-6 4 4 4-6 6 8"/>','settings':'<circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M19 5l-2 2M7 17l-2 2"/>',
+ 'trash-2':'<path d="M4 7h16M8 7V4h8v3M6 7l1 14h10l1-14m-8 4v7m4-7v7"/>','badge-check':'<path d="m12 2 2.5 1.8 3-.3.9 2.9 2.6 1.6-1 2.9 1 2.9-2.6 1.6-.9 2.9-3-.3L12 22l-2.5-1.8-3 .3-.9-2.9L3 16l1-2.9L3 10.2l2.6-1.6.9-2.9 3 .3L12 2Zm-3 10 2 2 4-4"/>',
+ 'check-circle-2':'<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>','chevron-up':'<path d="m6 15 6-6 6 6"/>','chevron-right':'<path d="m9 6 6 6-6 6"/>','clock':'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+ 'edit':'<path d="M3 17v4h4L21 7l-4-4L3 17ZM14 6l4 4"/>','external-link':'<path d="M14 4h6v6m0-6L11 13M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+ 'file-check':'<path d="M5 2h10l5 5v15H5V2Zm10 0v6h5m-9 6 2 2 4-4"/>','folder-open':'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v2M3 7v12a1 1 0 0 0 1 1h15a1 1 0 0 0 1-1l2-8H6l-2 8"/>',
+ 'grip-vertical':'<circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/>',
+ 'layout-grid':'<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/>',
+ 'link':'<path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1m-1 4a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/>',
+ 'palette':'<circle cx="12" cy="12" r="10"/><circle cx="8" cy="9" r="1"/><circle cx="12" cy="7" r="1"/><circle cx="16" cy="9" r="1"/><path d="M12 22a4 4 0 0 1 0-8 2 2 0 0 0 0-4"/>',
+ 'rocket':'<path d="M5 15c-1 3-1 5-1 5s2 0 5-1m-4-4 4 4m3-13c4-4 8-4 8-4s0 4-4 8l-4 4-4-4 4-4Zm4 4 3 3"/>',
+ 'save':'<path d="M5 2h11l3 3v17H5V2Zm3 0v6h8V2M8 13h8v7H8v-7Z"/>','type':'<path d="M4 6V4h16v2M12 4v16m-3 0h6"/>',
+ 'upload':'<path d="M12 16V4m-4 4 4-4 4 4M4 18v2h16v-2"/>','zap':'<path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/>'
 };
 window.lucide={createIcons(){document.querySelectorAll('[data-lucide]').forEach(el=>{let name=el.getAttribute('data-lucide')||'sparkles';const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('width','20');svg.setAttribute('height','20');svg.setAttribute('stroke','currentColor');svg.setAttribute('fill','none');svg.setAttribute('stroke-width','1.85');svg.setAttribute('stroke-linecap','round');svg.setAttribute('stroke-linejoin','round');svg.setAttribute('aria-hidden','true');svg.innerHTML=common[name]||common.sparkles;svg.className=el.className;el.replaceWith(svg);});}};
 })();

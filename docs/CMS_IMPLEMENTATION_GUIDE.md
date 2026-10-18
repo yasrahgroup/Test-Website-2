@@ -2,9 +2,9 @@
 
 ## 1. System Architecture & Prerequisites
 
-AZAROTH is built as a zero-dependency, high-performance Node.js application leveraging Node 22 LTS native capabilities:
+AZAROTH is a Node.js application using PostgreSQL for persistent records and filesystem storage for uploaded assets:
 - **Server Engine**: Native `node:http` with streaming, granular routing, and strict security headers.
-- **Data Persistence**: Embedded `node:sqlite` in WAL mode with atomic transactions and in-memory fallback.
+- **Data Persistence**: PostgreSQL via the `pg` driver; database connectivity is required and the application has no in-memory fallback.
 - **Crypto & Security**: Native `node:crypto` (`scryptSync` password hashing, constant-time `timingSafeEqual`, SHA-256 tokens).
 - **Filesystem & Storage**: Native `node:fs` with strict octal permissions (`0o600` for files, `0o700` for directories).
 - **Frontend Architecture**: Client-side reactive SPA framework with dynamic SSR shell pre-rendering for SEO and social crawlers.
@@ -13,7 +13,7 @@ AZAROTH is built as a zero-dependency, high-performance Node.js application leve
 
 ## 2. Environment Variables & Setup
 
-Configuration is controlled via environment variables or a local `.env` file (see `.env.example`):
+Configuration is controlled via environment variables or a local `.env` file (see `.env.example`). Configure `DATABASE_URL` for PostgreSQL; use `DATABASE_URL_UNPOOLED` only when supplied by your database provider. Database URLs remain server-side and must not be sent to browser code.
 
 ```bash
 # Server & Port
@@ -21,13 +21,16 @@ PORT=3000                     # HTTP listener port (default: 3000)
 PUBLIC_URL=http://localhost:3000 # Canonical base URL for SEO and sitemaps
 NODE_ENV=production           # 'development' or 'production'
 
-# Storage & Persistence
-STORAGE_DIR=storage           # Root storage directory (contains media/, private/, website.sqlite)
-DB_PATH=storage/website.sqlite # Explicit SQLite database file path
+# File storage (public media and private resumes; database is PostgreSQL)
+STORAGE_DIR=storage
 
 # Initial Admin Bootstrap
 INITIAL_ADMIN_EMAIL=admin@azaroth.tech
 INITIAL_ADMIN_PASSWORD=your-super-strong-password
+
+# Dedicated PostgreSQL database for tests only; never point this at production.
+# Tests create and remove a uniquely named schema.
+TEST_DATABASE_URL=postgresql://user:password@host:port/test_database?sslmode=require
 
 # Transactional Email (Optional)
 RESEND_API_KEY=re_...
@@ -40,13 +43,14 @@ NOTIFY_TO=team@azaroth.tech
 ## 3. Local Development & Operational Commands
 
 ```bash
-# Install dependencies (zero production npm dependencies required)
+# Install dependencies, including the PostgreSQL driver
 npm install
 
 # Start local dev server with file watching
 npm run dev
 
-# Run comprehensive verification suite (syntax, integration, frontend, startup, parity)
+# Set TEST_DATABASE_URL to a dedicated test database before running integration tests.
+# Run checks plus integration, frontend, startup, and parity suites
 npm run verify
 
 # Individual test runners
@@ -57,9 +61,15 @@ npm run test:parity   # Product customization & parity test
 
 # Operational scripts
 npm run doctor        # Pre-flight environment diagnostics
-npm run backup        # Archive database, media, and private resumes
+npm run backup        # Export PostgreSQL tables, media, and private resumes
 npm run reset-password # CLI tool to securely rotate admin credentials
+
+# SQLite import: inspect first, then migrate after reviewing the plan.
+npm run migrate:sqlite:plan
+npm run migrate:sqlite
 ```
+
+The migration creates checksum-verified backups of the SQLite source, current PostgreSQL data, `storage/media`, and `storage/private` before committing data changes. It merges source records in a transaction, preserving PostgreSQL-only records and remapping colliding audit IDs. Keep and secure the backups, leave the source SQLite database unchanged, and verify migrated counts/content before retiring it. See the project README for the migration procedure and conflict behavior.
 
 ---
 
@@ -67,8 +77,8 @@ npm run reset-password # CLI tool to securely rotate admin credentials
 
 ### 4.1 Container & Cloud Run
 When running in Docker or Cloud Run:
-- Cloud Run automatically injects `PORT=8080`. The server detects this and binds port 3000 or the assigned port cleanly.
-- Mount a persistent volume at `/app/storage` (or configure `STORAGE_DIR` to a mounted Cloud Storage bucket/NFS share) to ensure uploaded assets and SQLite databases persist across container restarts.
+- Configure the PostgreSQL URLs in the deployment environment; Compose reads `.env` and passes the database configuration to the app.
+- Mount persistent storage at `/app/storage` for uploaded public media and private resumes. PostgreSQL is managed separately from this filesystem volume.
 
 ### 4.2 Security Best Practices
 - The server sets comprehensive security headers automatically:

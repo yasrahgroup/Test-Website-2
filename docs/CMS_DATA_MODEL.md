@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-The AZAROTH platform uses a high-performance, embedded relational data store (SQLite via Node.js 22 `node:sqlite` or in-memory fallback) with write-ahead logging (WAL), foreign key constraints, and automatic migration synchronization.
+The AZAROTH application uses PostgreSQL, connected through the `pg` Node.js driver. The server initializes and updates its application tables at startup; PostgreSQL connectivity is required, with no SQLite or in-memory runtime fallback. SQLite is supported only as a source for the explicit, backed-up migration utility (`npm run migrate:sqlite`).
 
 ---
 
@@ -95,20 +95,22 @@ Stores uploaded binary assets metadata and filesystem references.
 | Column | Type | Default | Description |
 |---|---|---|---|
 | `id` | `INTEGER` | `PRIMARY KEY AUTOINCREMENT` | Unique media ID |
-| `filename` | `TEXT` | `NOT NULL` | Hex-randomized disk filename (`<hash>.<ext>`) |
+| `filename` | `TEXT` | `UNIQUE NOT NULL` | Hex-randomized disk filename (`<hash>.<ext>`) |
 | `mime` | `TEXT` | `NOT NULL` | Validated MIME type (`image/png`, `image/jpeg`, etc.) |
 | `alt` | `TEXT` | `NOT NULL DEFAULT ''`| Accessible alt description |
 | `size` | `INTEGER` | `NOT NULL` | File byte length |
 | `created_at` | `TEXT` | `CURRENT_TIMESTAMP` | Upload timestamp |
 
-### 2.7 Table: `enquiries`
+### 2.7 Table: `inquiries`
 Captures inbound business inquiries submitted via the public contact form.
 
 | Column | Type | Description |
 |---|---|---|
 | `id` | `INTEGER PRIMARY KEY AUTOINCREMENT` | Unique ID |
-| `name`, `email`, `company`, `message` | `TEXT NOT NULL` | User input fields |
+| `name`, `email` | `TEXT NOT NULL` | Contact details |
+| `company` | `TEXT NOT NULL DEFAULT ''` | Company name |
 | `service` | `TEXT NOT NULL DEFAULT ''` | Selected service interest |
+| `message` | `TEXT NOT NULL` | User inquiry |
 | `status` | `TEXT NOT NULL DEFAULT 'new'` | Pipeline stage (`new`, `contacted`, `closed`) |
 | `notes` | `TEXT NOT NULL DEFAULT ''` | Internal staff notes |
 | `created_at` | `TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP` | Submission timestamp |
@@ -119,17 +121,20 @@ Captures inbound job applications and private resume uploads.
 | Column | Type | Description |
 |---|---|---|
 | `id` | `INTEGER PRIMARY KEY AUTOINCREMENT` | Application ID |
-| `opening_slug`, `name`, `email`, `phone`, `note` | `TEXT NOT NULL` | Applicant details |
-| `resume_filename` | `TEXT NOT NULL` | Reference to file in private storage (`storage/private/`) |
+| `job_slug`, `name`, `email` | `TEXT NOT NULL` | Job and applicant details |
+| `portfolio` | `TEXT NOT NULL DEFAULT ''` | Applicant portfolio URL |
+| `message` | `TEXT NOT NULL DEFAULT ''` | Applicant note/message |
+| `resume_filename` | `TEXT NOT NULL DEFAULT ''` | Reference to file in private storage (`storage/private/`) |
+| `status` | `TEXT NOT NULL DEFAULT 'new'` | Application workflow state |
 | `created_at` | `TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP` | Application timestamp |
 
 ### 2.9 Table: `audit`
-Immutable administrative audit trail.
+Administrative audit trail; the application records actions as new rows.
 
 | Column | Type | Description |
 |---|---|---|
 | `id` | `INTEGER PRIMARY KEY AUTOINCREMENT` | Entry ID |
-| `user_id` | `INTEGER` | Foreign key referencing `users(id)` or `NULL` |
+| `user_id` | `INTEGER` | Actor ID, or `NULL`; no database foreign-key constraint |
 | `action` | `TEXT NOT NULL` | Action code (`entry.saved`, `media.uploaded`, etc.) |
 | `details` | `TEXT NOT NULL DEFAULT ''` | Serialized action context |
 | `created_at` | `TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP` | Log timestamp |
