@@ -19,6 +19,7 @@
     "predev": "node scripts/doctor.cjs --prestart",
     "doctor": "node scripts/doctor.cjs",
     "test:startup": "node tests/startup.mjs",
-    "verify": "npm run check && npm test && npm run test:frontend && npm run test:startup"
+    "test:parity": "node tests/cms-parity-products.mjs",
+    "verify": "npm run check && npm test && npm run test:frontend && npm run test:startup && npm run test:parity"
   }
 }

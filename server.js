@@ -95,7 +95,7 @@ try {
    CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
    CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY AUTOINCREMENT,email TEXT UNIQUE NOT NULL,password_hash TEXT NOT NULL,role TEXT NOT NULL CHECK(role IN ('admin','editor','viewer')),active INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
    CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,csrf TEXT NOT NULL,expires INTEGER NOT NULL);
-   CREATE TABLE IF NOT EXISTS entries(id INTEGER PRIMARY KEY AUTOINCREMENT,type TEXT NOT NULL,slug TEXT NOT NULL,title TEXT NOT NULL,summary TEXT NOT NULL DEFAULT '',body TEXT NOT NULL DEFAULT '',image TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'draft',seo_title TEXT NOT NULL DEFAULT '',seo_description TEXT NOT NULL DEFAULT '',category TEXT NOT NULL DEFAULT '',location TEXT NOT NULL DEFAULT '',job_type TEXT NOT NULL DEFAULT '',technology TEXT NOT NULL DEFAULT '',gallery TEXT NOT NULL DEFAULT '[]',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE(type,slug));
+   CREATE TABLE IF NOT EXISTS entries(id INTEGER PRIMARY KEY AUTOINCREMENT,type TEXT NOT NULL,slug TEXT NOT NULL,title TEXT NOT NULL,summary TEXT NOT NULL DEFAULT '',body TEXT NOT NULL DEFAULT '',image TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'draft',seo_title TEXT NOT NULL DEFAULT '',seo_description TEXT NOT NULL DEFAULT '',category TEXT NOT NULL DEFAULT '',location TEXT NOT NULL DEFAULT '',job_type TEXT NOT NULL DEFAULT '',technology TEXT NOT NULL DEFAULT '',gallery TEXT NOT NULL DEFAULT '[]',features TEXT NOT NULL DEFAULT '[]',specifications TEXT NOT NULL DEFAULT '[]',faqs TEXT NOT NULL DEFAULT '[]',sections_config TEXT NOT NULL DEFAULT '[]',hero_cta_label TEXT NOT NULL DEFAULT '',hero_cta_link TEXT NOT NULL DEFAULT '',secondary_cta_label TEXT NOT NULL DEFAULT '',secondary_cta_link TEXT NOT NULL DEFAULT '',image_position TEXT NOT NULL DEFAULT 'right',social_image TEXT NOT NULL DEFAULT '',canonical_url TEXT NOT NULL DEFAULT '',related_slugs TEXT NOT NULL DEFAULT '[]',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE(type,slug));
    CREATE INDEX IF NOT EXISTS idx_entries ON entries(type,status,updated_at);
    CREATE TABLE IF NOT EXISTS layouts(slug TEXT PRIMARY KEY,title TEXT NOT NULL,blocks TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'draft',seo_title TEXT NOT NULL DEFAULT '',seo_description TEXT NOT NULL DEFAULT '',updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
    CREATE TABLE IF NOT EXISTS media(id INTEGER PRIMARY KEY AUTOINCREMENT,filename TEXT UNIQUE NOT NULL,mime TEXT NOT NULL,alt TEXT NOT NULL DEFAULT '',size INTEGER NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
@@ -127,18 +127,26 @@ try {
    console.warn('Legacy media table migrated; original starter table retained as media_starter_backup.');
   }
   const entryColumns=new Set(db.prepare('PRAGMA table_info(entries)').all().map(x=>x.name));
-  for(const col of ['seo_title','seo_description','category','location','job_type','technology','gallery'])if(entryColumns.size && !entryColumns.has(col))db.exec(`ALTER TABLE entries ADD COLUMN ${col} TEXT NOT NULL DEFAULT '${col==='gallery'?'[]':''}'`);
+  const newCols=['seo_title','seo_description','category','location','job_type','technology','gallery','features','specifications','faqs','sections_config','hero_cta_label','hero_cta_link','secondary_cta_label','secondary_cta_link','image_position','social_image','canonical_url','related_slugs'];
+  for(const col of newCols)if(entryColumns.size && !entryColumns.has(col)){
+    const defaultVal=['gallery','features','specifications','faqs','sections_config','related_slugs'].includes(col)?'[]':col==='image_position'?'right':'';
+    db.exec(`ALTER TABLE entries ADD COLUMN ${col} TEXT NOT NULL DEFAULT '${defaultVal}'`);
+  }
 } catch (e) {
   console.warn('[SQLite] Schema migration check:', e.message);
 }
 const TYPES = new Set(['services','industries','products','careers','blog','projects','pages','testimonials','team','technologies']);
 const ROLES={viewer:1,editor:2,admin:3};
  const defaults={
-  brand:'AZAROTH',brandTitle:'AZAROTH',brandSubtitle:'TECHHIVE',tagline:'Ideas. Technology. Impact.',footerBrandTitle:'AZAROTH',footerBrandSubtitle:'TECHHIVE',heroEyebrow:'BUILDING TOMORROW, TOGETHER',heroTitle:'Innovative Software Solutions for a Brighter World',heroDescription:'We design, build and scale intelligent digital experiences that help ambitious businesses innovate, transform and grow.',
+  brand:'AZAROTH TECH-HIVE',brandTitle:'AZAROTH',brandSubtitle:'TECH-HIVE',tagline:'Ideas. Technology. Impact.',footerBrandTitle:'AZAROTH',footerBrandSubtitle:'TECH-HIVE',heroEyebrow:'SOFTWARE ENGINEERING & DIGITAL SOLUTIONS',heroTitle:'Innovative Software Solutions — Technology designed around the *way you work.*',heroDescription:'We design, build and scale intelligent digital experiences that help ambitious businesses innovate, transform and grow.',
   aboutTitle:'Driven by Innovation. Powered by People.',aboutDescription:'Technology should empower people. Our approach combines thoughtful engineering, design and strategy to solve complex challenges.',mission:'To empower businesses through purposeful technology and lasting partnerships.',
   contactEmail:'hello@example.com',contactPhone:'+00 000 000 0000',contactLocation:'Your city · Worldwide',footerDescription:'Ideas become impact when technology meets imagination. Building purposeful digital experiences for tomorrow.',
  homeProductsEnabled:'true',homeProductsTitle:'Digital Products. Thoughtfully Designed.',homeProductsDescription:'Explore the platforms and software products our team builds for real business challenges.',
- primary:'#900b2b',gold:'#d5a13c',orange:'#f47721',background:'#faf8f4',ink:'#171b2c',logo:'/logo.png',cursorEnabled:'true',cursorStyle:'gold-ring',cursorSize:'42',cursorLag:'0.32',animationPreset:'elegant',
+ homeServicesEyebrow:'WHAT WE DO',homeServicesTitle:'Technology Solutions, Thoughtfully Built',homeServicesDescription:'From ambitious ideas to reliable products, our teams bring the right technology to every challenge.',
+ homeIndustriesEyebrow:'OUR EXPERTISE',homeIndustriesTitle:'Technology for Every Possibility',homeIndustriesDescription:'Focused digital solutions for organizations across a wide range of industries.',
+ homeApproachEyebrow:'OUR APPROACH',homeApproachTitle:'Built Around People. Driven by Purpose.',homeApproachDescription:'A collaborative way of working, grounded in clarity, creativity and lasting value.',
+ ctaEyebrow:"LET'S MAKE IT HAPPEN",ctaTitle:"Have an idea? Let's build *something great.*",ctaButtonText:'Start a conversation',ctaButtonLink:'/contact',
+ primary:'#900b2b',gold:'#d5a13c',orange:'#f47721',background:'#faf8f4',ink:'#171b2c',logo:'/logo.png',heroImage:'/logo.png',aboutImage:'/images/about_corporate_studio.jpg',cursorEnabled:'true',cursorStyle:'gold-ring',cursorSize:'42',cursorLag:'0.32',animationPreset:'elegant',
  navigation:JSON.stringify([{label:'Home',url:'/'},{label:'About',url:'/about'},{label:'Services',url:'/services'},{label:'Industries',url:'/industries'},{label:'Products',url:'/products'},{label:'Case Studies',url:'/projects'},{label:'Insights',url:'/blog'},{label:'Careers',url:'/careers'},{label:'Contact',url:'/contact'}]),
  socials:JSON.stringify([]),services:JSON.stringify([{icon:'code-2',name:'Custom Software',description:'Tailored, scalable applications engineered for your business.'},{icon:'cloud',name:'Cloud & DevOps',description:'Modern infrastructure designed for reliability and growth.'},{icon:'smartphone',name:'Mobile Experiences',description:'Thoughtful, high-performance apps for every screen.'},{icon:'brain-circuit',name:'AI & Automation',description:'Intelligent workflows that simplify complex operations.'},{icon:'layers-3',name:'Enterprise Platforms',description:'Connected systems that help your teams move faster.'},{icon:'shield-check',name:'Security & Support',description:'Dependable protection and ongoing technical care.'}]),
  industries:JSON.stringify([{name:'Healthcare',icon:'heart-pulse',description:'Human-centered digital care',tone:'mint'},{name:'Finance',icon:'chart-no-axes-combined',description:'Confident financial innovation',tone:'peach'},{name:'Retail',icon:'shopping-bag',description:'Connected customer experiences',tone:'lavender'},{name:'Education',icon:'graduation-cap',description:'Smarter learning platforms',tone:'sky'},{name:'Manufacturing',icon:'factory',description:'Intelligent operations',tone:'peach'},{name:'Logistics',icon:'truck',description:'Visibility across the journey',tone:'mint'}]),
@@ -182,26 +190,32 @@ function j(res,code,obj,h={}){res.writeHead(code,{'Content-Type':'application/js
 const e=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const str=(x,max)=>String(x??'').trim().slice(0,max);
 const slugOK=x=>typeof x==='string'&&x.length<=110&&/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(x);
-const imgOK=x=>x===''||/^\/(logo|logo-source|icon-48|icon-192|icon-512)\.png$/.test(x)||(/^\/media\/[a-f0-9]{32}\.(png|jpg|webp)$/.test(x)||/^https:\/\/[\w.-]+(?:\/[^\s"'<>]*)?$/.test(x));
+const imgOK=x=>x===''||/^\/(logo|logo-source|icon-48|icon-192|icon-512)\.png$/.test(x)||(/^\/images\/[a-z0-9_.-]+\.(png|jpg|webp)$/.test(x))||(/^\/media\/[a-f0-9]{32}\.(png|jpg|webp)$/.test(x)||/^https:\/\/[\w.-]+(?:\/[^\s"'<>]*)?$/.test(x));
 function cookies(req){const out={};for(const segment of (req.headers.cookie||'').split(';')){const pos=segment.indexOf('=');if(pos>0)out[segment.slice(0,pos).trim()]=segment.slice(pos+1).trim();}return out;}
-function member(req){const token=cookies(req).sid;if(!token||!/^[a-f0-9]{64}$/.test(token))return null;return db.prepare('SELECT u.id,u.email,u.role,s.csrf,s.expires FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND u.active=1').get(sha(token))||null;}
+function member(req){const auth=req.headers.authorization;const bearer=auth&&auth.startsWith('Bearer ')?auth.slice(7).trim():null;const token=bearer||req.headers['x-session-token']||cookies(req).sid;if(!token||!/^[a-f0-9]{64}$/.test(token))return null;return db.prepare('SELECT u.id,u.email,u.role,s.csrf,s.expires FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND u.active=1').get(sha(token))||null;}
 function allowed(req,member,role='viewer'){return !!member&&member.expires>Date.now()&&ROLES[member.role]>=ROLES[role];}
-function sameSite(req){const origin=req.headers.origin;if(origin){try{const u=new URL(origin);const expectedHost=req.headers['x-forwarded-host']||req.headers.host;if(u.host!==expectedHost&&u.host!==req.headers.host)return false;return u.protocol==='http:'||u.protocol==='https:';}catch{return false;}}const sec=req.headers['sec-fetch-site'];return !sec||sec==='same-origin'||sec==='none';}
-function authWrite(req,member){return sameSite(req)&&req.headers['x-csrf-token']===member.csrf;}
+function sameSite(req){const origin=req.headers.origin;if(origin){try{const u=new URL(origin);if(u.protocol!=='http:'&&u.protocol!=='https:')return false;const hostCandidates=[req.headers['x-forwarded-host'],req.headers.host,process.env.PUBLIC_URL?new URL(process.env.PUBLIC_URL).host:null].filter(Boolean).flatMap(h=>h.split(',').map(s=>s.trim().toLowerCase()));const originHost=u.host.toLowerCase();if(hostCandidates.some(h=>h===originHost||h.split(':')[0]===u.hostname.toLowerCase()))return true;if(originHost.endsWith('.run.app')||originHost.endsWith('.google.dev')||originHost.endsWith('.aistudio.google.com')||u.hostname==='localhost'||u.hostname==='127.0.0.1')return true;return false;}catch{return false;}}const sec=req.headers['sec-fetch-site'];return !sec||sec==='same-origin'||sec==='none'||sec==='same-site'||sec==='cross-site';}
+function authWrite(req,member){const token=req.headers['x-session-token']||(req.headers.authorization&&req.headers.authorization.startsWith('Bearer ')&&req.headers.authorization.slice(7).trim());const tokenValid=!!token;const csrfValid=req.headers['x-csrf-token']===member.csrf;return sameSite(req)&&(csrfValid||tokenValid);}
 const hits=new Map();function limited(req,key,max,period=60000){const ip=(req.socket.remoteAddress||'unknown').slice(0,120),id=key+':'+ip,now=Date.now(),prev=hits.get(id)||[],fresh=prev.filter(t=>t>now-period);fresh.push(now);hits.set(id,fresh);if(hits.size>15000){for(const [k,v] of hits){if(!v.length||v[v.length-1]<now-period)hits.delete(k);}}return fresh.length>max;}
 async function jsonBody(req,limit=140000){const chunks=[];let n=0;for await(const part of req){n+=part.length;if(n>limit)throw Object.assign(Error('Payload too large'),{httpCode:413});chunks.push(part);}try{return JSON.parse(Buffer.concat(chunks).toString('utf8')||'{}');}catch{throw Object.assign(Error('Invalid JSON'),{httpCode:400});}}
 function validateBlocks(list){if(!Array.isArray(list)||list.length>45)return false;const kinds=new Set(['hero','text','image-text','cards','stats','faq','cta','collection','divider']);return list.every(b=>b&&typeof b==='object'&&kinds.has(b.type)&&typeof b.id==='string'&&b.id.length<=60&&JSON.stringify(b).length<=20000&&(!b.items||(Array.isArray(b.items)&&b.items.length<=35&&b.items.every(x=>x&&typeof x==='object'&&Object.values(x).every(v=>typeof v==='string'&&v.length<=1800))))&&Object.entries(b).every(([k,v])=>k==='items'||(typeof v==='string'&&v.length<=18000))); }
 async function notify(subject,message){if(!process.env.RESEND_API_KEY||!process.env.NOTIFY_FROM||!process.env.NOTIFY_TO)return false;try{const response=await fetch('https://api.resend.com/emails',{method:'POST',headers:{'Authorization':'Bearer '+process.env.RESEND_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({from:process.env.NOTIFY_FROM,to:[process.env.NOTIFY_TO],subject,text:message})});return response.ok;}catch(err){console.error('Notification error',err.message);return false;}}
 function previewText(s){return String(s||'').replace(/\s+/g,' ').slice(0,200);}
-function contentSEO(p,site){let title=site.brand+' — '+site.tagline,description=previewText(site.heroDescription);
+function contentSEO(p,site){let title=site.brand+' — '+site.tagline,description=previewText(site.heroDescription),entryData=null;
  const pages={'/':'Home','/about':'About Us','/services':'Services','/industries':'Industries','/products':'Products','/blog':'Insights','/careers':'Careers','/projects':'Case Studies','/contact':'Contact','/privacy':'Privacy Policy','/terms':'Terms of Use'};
  if(p!=='/'&&pages[p])title=pages[p]+' | '+site.brand;
  const match=/^\/(services|industries|products|careers|blog|projects|pages|testimonials|team|technologies)\/([a-z0-9-]+)$/.exec(p);
- if(match){const item=db.prepare('SELECT title,summary,seo_title,seo_description FROM entries WHERE type=? AND slug=? AND status=?').get(match[1],match[2],'published');if(item){title=(item.seo_title||item.title)+' | '+site.brand;description=previewText(item.seo_description||item.summary);}}
+ if(match){const item=db.prepare('SELECT title,summary,body,features,seo_title,seo_description FROM entries WHERE type=? AND slug=? AND status=?').get(match[1],match[2],'published');if(item){title=(item.seo_title||item.title)+' | '+site.brand;description=previewText(item.seo_description||item.summary);entryData=item;}}
  const pageName=p==='/'?'home':p.slice(1).replaceAll('/','-');const layout=db.prepare('SELECT seo_title,seo_description FROM layouts WHERE slug=? AND status=?').get(pageName,'published');if(layout){title=layout.seo_title||title;description=layout.seo_description||description;}
- return {title,description};}
+ return {title,description,entryData};}
 function webHtml(p){const site=settings(),seo=contentSEO(p,site),canonical=siteUrl+p;
- const fallback=p==='/'?`<div style="max-width:1100px;margin:150px auto;padding:30px"><h1>${e(site.heroTitle)}</h1><p>${e(site.heroDescription)}</p><a href="/services">Explore services</a></div>`:`<div style="max-width:1100px;margin:150px auto;padding:30px"><h1>${e(seo.title)}</h1><p>${e(seo.description)}</p></div>`;
+ let extraHtml='';
+ if(seo.entryData){
+  extraHtml=`<div><p>${e(seo.entryData.body)}</p>`;
+  if(seo.entryData.features){try{const fl=JSON.parse(seo.entryData.features);if(Array.isArray(fl))extraHtml+='<ul>'+fl.map(f=>`<li><strong>${e(f.title||'')}</strong> ${e(f.description||'')}</li>`).join('')+'</ul>';}catch{}}
+  extraHtml+='</div>';
+ }
+ const fallback=p==='/'?`<div style="max-width:1100px;margin:150px auto;padding:30px"><h1>${e(site.heroTitle)}</h1><p>${e(site.heroDescription)}</p><a href="/services">Explore services</a></div>`:`<div style="max-width:1100px;margin:150px auto;padding:30px"><h1>${e(seo.title)}</h1><p>${e(seo.description)}</p>${extraHtml}</div>`;
  let template = '';
  try {
   template = fs.readFileSync(path.join(pub,'index.html'),'utf8');
@@ -227,7 +241,7 @@ const handleRequest = async(req,res)=>{
    }
   }catch{}
   const url=new URL(requestUrl,'http://localhost');let p=url.pathname;if(p.length>1&&p.endsWith('/'))p=p.slice(0,-1);const method=req.method;const user=member(req);
- if(method==='GET'&&p==='/api/health')return j(res,200,{ok:true,db:true});
+ if(method==='GET'&&(p==='/api/health'||p==='/health'))return j(res,200,{ok:true,db:true});
  if(method==='GET'&&p==='/api/content')return j(res,200,settings());
  if(method==='GET'&&p==='/api/layouts'){
   const slug=url.searchParams.get('slug')||'';if(!/^[a-z0-9-]{1,110}$/.test(slug))return j(res,400,{error:'Invalid page'});
@@ -237,8 +251,8 @@ const handleRequest = async(req,res)=>{
  if(method==='GET'&&p==='/api/entries'){
   const type=url.searchParams.get('type');if(!TYPES.has(type))return j(res,400,{error:'Invalid collection'});
   const slug=url.searchParams.get('slug');let rows;
-  if(slug){if(!slugOK(slug))return j(res,400,{error:'Invalid slug'});rows=db.prepare('SELECT id,type,slug,title,summary,body,image,category,location,job_type,technology,gallery,updated_at FROM entries WHERE type=? AND slug=? AND status=?').get(type,slug,'published');}
-  else rows=db.prepare('SELECT id,type,slug,title,summary,image,category,location,job_type,technology,updated_at FROM entries WHERE type=? AND status=? ORDER BY updated_at DESC LIMIT 200').all(type,'published');
+  if(slug){if(!slugOK(slug))return j(res,400,{error:'Invalid slug'});rows=db.prepare('SELECT id,type,slug,title,summary,body,image,category,location,job_type,technology,gallery,features,specifications,faqs,sections_config,hero_cta_label,hero_cta_link,secondary_cta_label,secondary_cta_link,image_position,social_image,canonical_url,related_slugs,updated_at FROM entries WHERE type=? AND slug=? AND status=?').get(type,slug,'published');}
+  else rows=db.prepare('SELECT id,type,slug,title,summary,image,category,location,job_type,technology,hero_cta_label,hero_cta_link,image_position,updated_at FROM entries WHERE type=? AND status=? ORDER BY updated_at DESC LIMIT 200').all(type,'published');
   return j(res,200,rows||null);
  }
  if(method==='POST'&&p==='/api/contact'){
@@ -262,20 +276,21 @@ const handleRequest = async(req,res)=>{
   return j(res,200,{ok:true});
  }
  if(method==='POST'&&p==='/api/admin/login'){
-  if(!sameSite(req)||limited(req,'login',6,600000))return j(res,429,{error:'Too many attempts. Try again later.'});
+  if(!sameSite(req)||limited(req,'login',30,600000))return j(res,429,{error:'Too many attempts. Try again later.'});
   const x=await jsonBody(req);let email=str(x.email,254).toLowerCase(),pw=String(x.password||'').slice(0,300);
   if(!email){const first=db.prepare("SELECT email FROM users WHERE role='admin' AND active=1 ORDER BY id ASC LIMIT 1").get();if(first)email=first.email;}
-  const row=db.prepare('SELECT id,password_hash,active FROM users WHERE email=?').get(email);
+  const row=db.prepare('SELECT id,email,role,password_hash,active FROM users WHERE email=?').get(email);
   if(!row||!row.active||!verifyPassword(pw,row.password_hash))return j(res,401,{error:'Invalid email or password'});
   db.prepare('DELETE FROM sessions WHERE expires<?').run(Date.now());
   const token=hex(32).toString('hex'),csrf=hex(24).toString('hex');
   db.prepare('INSERT INTO sessions(token_hash,user_id,csrf,expires) VALUES(?,?,?,?)').run(sha(token),row.id,csrf,Date.now()+8*3600*1000);
   audit(row.id,'auth.login');
-  return j(res,200,{ok:true,csrf},{'Set-Cookie':`sid=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=28800${prod?'; Secure':''}`});
+  return j(res,200,{ok:true,csrf,token,email:row.email,role:row.role},{'Set-Cookie':`sid=${token}; Path=/; HttpOnly; SameSite=None; Secure; Partitioned; Max-Age=28800`});
  }
  if(p==='/api/admin/logout'&&method==='POST'){
-  if(user&&authWrite(req,user)){db.prepare('DELETE FROM sessions WHERE token_hash=?').run(sha(cookies(req).sid));audit(user.id,'auth.logout');}
-  return j(res,200,{ok:true},{'Set-Cookie':`sid=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${prod?'; Secure':''}`});
+  const token=req.headers.authorization?.startsWith('Bearer ')?req.headers.authorization.slice(7).trim():req.headers['x-session-token']||cookies(req).sid;
+  if(user){if(token)db.prepare('DELETE FROM sessions WHERE token_hash=?').run(sha(token));audit(user.id,'auth.logout');}
+  return j(res,200,{ok:true},{'Set-Cookie':`sid=; Path=/; HttpOnly; SameSite=None; Secure; Partitioned; Max-Age=0`});
  }
  if(p.startsWith('/api/admin/')){
   if(!allowed(req,user))return j(res,401,{error:'Authentication required'});
@@ -295,7 +310,7 @@ const handleRequest = async(req,res)=>{
      if(!/^#[0-9a-fA-F]{6}$/.test(v))return j(res,400,{error:'Invalid colour'});
     }
     if(k==='cursorStyle'&&!['gold-ring','gold-orbit','micro-dot','glass-outline'].includes(v))return j(res,400,{error:'Invalid cursor style'});
-    if(k==='logo'&&!imgOK(v))return j(res,400,{error:'Invalid logo URL'});
+    if(['logo','heroImage','aboutImage'].includes(k)&&!imgOK(v))return j(res,400,{error:'Invalid image URL for '+k});
     edits.push([k,v]);}
    db.exec('BEGIN');try{for(const [k,v] of edits)put.run(k,v);db.exec('COMMIT');try{db.exec('PRAGMA wal_checkpoint(PASSIVE);');}catch{}}catch(err){db.exec('ROLLBACK');throw err;}
    audit(user.id,'settings.saved',edits.map(x=>x[0]).join(','));return j(res,200,{ok:true});
@@ -306,10 +321,25 @@ const handleRequest = async(req,res)=>{
   }
   if(p==='/api/admin/entries'&&method==='POST'){
    if(!allowed(req,user,'editor'))return j(res,403,{error:'Editor required'});
-   const x=await jsonBody(req,100000),type=x.type,slug=str(x.slug,110).toLowerCase();if(!TYPES.has(type)||!slugOK(slug))return j(res,400,{error:'Invalid type or slug'});
-   const title=str(x.title,180),summary=str(x.summary,1300),text=str(x.body,40000),image=str(x.image,700),status=x.status==='published'?'published':'draft',seoTitle=str(x.seo_title,180),seoDesc=str(x.seo_description,300),category=str(x.category,110),location=str(x.location,110),jobType=str(x.job_type,110),technology=str(x.technology,700);let gallery='[]';if(x.gallery){try{const list=typeof x.gallery==='string'?JSON.parse(x.gallery):x.gallery;if(!Array.isArray(list)||list.length>12||!list.every(imgOK))throw Error('Invalid gallery');gallery=JSON.stringify(list);}catch{return j(res,400,{error:'Gallery must contain valid image URLs'});}}
+   const x=await jsonBody(req,200000),type=x.type,slug=str(x.slug,110).toLowerCase();if(!TYPES.has(type)||!slugOK(slug))return j(res,400,{error:'Invalid type or slug'});
+   const title=str(x.title,180),summary=str(x.summary,1300),text=str(x.body,40000),image=str(x.image,700),status=x.status==='published'?'published':'draft',seoTitle=str(x.seo_title,180),seoDesc=str(x.seo_description,300),category=str(x.category,110),location=str(x.location,110),jobType=str(x.job_type,110),technology=str(x.technology,700);
+   const galleryItemOK=item=>typeof item==='string'?imgOK(item):(item&&typeof item==='object'&&typeof item.url==='string'&&imgOK(item.url));
+   let gallery='[]';if(x.gallery){try{const list=typeof x.gallery==='string'?JSON.parse(x.gallery):x.gallery;if(!Array.isArray(list)||list.length>24||!list.every(galleryItemOK))throw Error('Invalid gallery');gallery=JSON.stringify(list);}catch{return j(res,400,{error:'Gallery must contain valid image URLs'});}}
+   const parseJSON=(val,maxLen=40)=>{if(!val)return'[]';try{const parsed=typeof val==='string'?JSON.parse(val):val;return Array.isArray(parsed)&&parsed.length<=maxLen?JSON.stringify(parsed):'[]';}catch{return'[]';}};
+   const features=parseJSON(x.features,40);
+   const specifications=parseJSON(x.specifications,40);
+   const faqs=parseJSON(x.faqs,40);
+   const sectionsConfig=parseJSON(x.sections_config,20);
+   const relatedSlugs=parseJSON(x.related_slugs,20);
+   const heroCtaLabel=str(x.hero_cta_label,80);
+   const heroCtaLink=str(x.hero_cta_link,250);
+   const secondaryCtaLabel=str(x.secondary_cta_label,80);
+   const secondaryCtaLink=str(x.secondary_cta_link,250);
+   const imagePosition=['right','left','full','top'].includes(x.image_position)?x.image_position:'right';
+   const socialImage=imgOK(x.social_image)?str(x.social_image,700):'';
+   const canonicalUrl=str(x.canonical_url,500);
    if(!title||!imgOK(image))return j(res,400,{error:'Title required and image must be a permitted URL'});
-   db.prepare(`INSERT INTO entries(type,slug,title,summary,body,image,status,seo_title,seo_description,category,location,job_type,technology,gallery) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(type,slug) DO UPDATE SET title=excluded.title,summary=excluded.summary,body=excluded.body,image=excluded.image,status=excluded.status,seo_title=excluded.seo_title,seo_description=excluded.seo_description,category=excluded.category,location=excluded.location,job_type=excluded.job_type,technology=excluded.technology,gallery=excluded.gallery,updated_at=CURRENT_TIMESTAMP`).run(type,slug,title,summary,text,image,status,seoTitle,seoDesc,category,location,jobType,technology,gallery);
+   db.prepare(`INSERT INTO entries(type,slug,title,summary,body,image,status,seo_title,seo_description,category,location,job_type,technology,gallery,features,specifications,faqs,sections_config,hero_cta_label,hero_cta_link,secondary_cta_label,secondary_cta_link,image_position,social_image,canonical_url,related_slugs) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(type,slug) DO UPDATE SET title=excluded.title,summary=excluded.summary,body=excluded.body,image=excluded.image,status=excluded.status,seo_title=excluded.seo_title,seo_description=excluded.seo_description,category=excluded.category,location=excluded.location,job_type=excluded.job_type,technology=excluded.technology,gallery=excluded.gallery,features=excluded.features,specifications=excluded.specifications,faqs=excluded.faqs,sections_config=excluded.sections_config,hero_cta_label=excluded.hero_cta_label,hero_cta_link=excluded.hero_cta_link,secondary_cta_label=excluded.secondary_cta_label,secondary_cta_link=excluded.secondary_cta_link,image_position=excluded.image_position,social_image=excluded.social_image,canonical_url=excluded.canonical_url,related_slugs=excluded.related_slugs,updated_at=CURRENT_TIMESTAMP`).run(type,slug,title,summary,text,image,status,seoTitle,seoDesc,category,location,jobType,technology,gallery,features,specifications,faqs,sectionsConfig,heroCtaLabel,heroCtaLink,secondaryCtaLabel,secondaryCtaLink,imagePosition,socialImage,canonicalUrl,relatedSlugs);
    audit(user.id,'entry.saved',type+'/'+slug+'/'+status);return j(res,200,{ok:true});
   }
   if(p==='/api/admin/entries'&&method==='DELETE'){
@@ -339,8 +369,13 @@ const handleRequest = async(req,res)=>{
    const valid=m[1]==='png'?buf.subarray(0,8).equals(Buffer.from('89504e470d0a1a0a','hex')):m[1]==='jpeg'?buf[0]===255&&buf[1]===216&&buf[2]===255:buf.toString('ascii',0,4)==='RIFF'&&buf.toString('ascii',8,12)==='WEBP';
    if(!valid)return j(res,400,{error:'Invalid image signature'});
    const ext=m[1]==='jpeg'?'jpg':m[1],filename=hex(16).toString('hex')+'.'+ext;
-   fs.writeFileSync(path.join(storage,'media',filename),buf,{flag:'wx',mode:0o600});db.prepare('INSERT INTO media(filename,mime,alt,size) VALUES(?,?,?,?)').run(filename,ext==='jpg'?'image/jpeg':'image/'+ext,str(x.alt,220),buf.length);
-   audit(user.id,'media.uploaded',filename);return j(res,200,{ok:true,url:'/media/'+filename});
+   fs.writeFileSync(path.join(storage,'media',filename),buf,{flag:'wx',mode:0o600});
+   const inserted=db.prepare('INSERT INTO media(filename,mime,alt,size) VALUES(?,?,?,?)').run(filename,ext==='jpg'?'image/jpeg':'image/'+ext,str(x.alt,220),buf.length);
+   audit(user.id,'media.uploaded',filename);return j(res,200,{ok:true,id:Number(inserted.lastInsertRowid),url:'/media/'+filename,filename,alt:str(x.alt,220),size:buf.length});
+  }
+  if(p==='/api/admin/media'&&method==='PATCH'){
+   if(!allowed(req,user,'editor'))return j(res,403,{error:'Editor required'});const x=await jsonBody(req),id=Number(x.id);if(!Number.isSafeInteger(id)||id<=0)return j(res,400,{error:'Invalid ID'});
+   db.prepare('UPDATE media SET alt=? WHERE id=?').run(str(x.alt,220),id);audit(user.id,'media.alt_updated',id);return j(res,200,{ok:true});
   }
   if(p==='/api/admin/media'&&method==='DELETE'){
    if(!allowed(req,user,'admin'))return j(res,403,{error:'Admin required'});const x=await jsonBody(req),row=db.prepare('SELECT filename FROM media WHERE id=?').get(Number(x.id));if(!row)return j(res,404,{error:'Media not found'});

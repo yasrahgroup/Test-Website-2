@@ -11,7 +11,7 @@ const ctx={console,document:doc,location,history:{pushState(){}},scrollTo(){},sc
 vm.createContext(ctx);
 for(const script of ['app.js','enhancements.js'])vm.runInContext(fs.readFileSync(path.join(base,script),'utf8'),ctx,{filename:script,timeout:8000});
 await new Promise(r=>setTimeout(r,50));
-function verify(pathname,contains){location.pathname=pathname;vm.runInContext('render()',ctx);if(!app.innerHTML.includes(contains))throw Error(pathname+' missing '+contains);console.log('✓ Client renders',pathname)}
+function verify(pathname,contains){location.pathname=pathname;vm.runInContext('render()',ctx);const text=app.innerHTML.replace(/<[^>]+>/g,'');if(!app.innerHTML.includes(contains)&&!text.includes(contains))throw Error(pathname+' missing '+contains);console.log('✓ Client renders',pathname)}
 verify('/','Innovative Software Solutions');
 if(!app.innerHTML.includes('id="featured-products"'))throw Error('Homepage product showcase missing');
 if(!app.innerHTML.includes('Discuss Your Product'))throw Error('Homepage product fallback missing');
@@ -22,7 +22,7 @@ vm.runInContext(`content.homeProductsEnabled='false';render()`,ctx);
 if(app.innerHTML.includes('id="featured-products"'))throw Error('Product visibility setting did not hide section');
 console.log('✓ CMS can hide homepage product showcase');
 vm.runInContext(`content.homeProductsEnabled='true';content.homeProductsTitle='CMS Edited Product Heading';render()`,ctx);
-if(!app.innerHTML.includes('CMS Edited Product Heading'))throw Error('CMS homepage product headline not rendered');
+if(!app.innerHTML.replace(/<[^>]+>/g,'').includes('CMS Edited Product Heading'))throw Error('CMS homepage product headline not rendered');
 console.log('✓ CMS editable homepage product heading');
 const css=fs.readFileSync(path.join(base,'style.css'),'utf8');
 if(!css.includes('.nav,.nav.stuck{')||!css.includes('background:transparent;border:0;border-radius:0;box-shadow:none'))throw Error('Transparent navigation styles missing');
